@@ -11,7 +11,9 @@ import { Config } from '../../../config/config';
 import { TelegramSender } from '../../../services/telegram-sender';
 import { ClaudeSessionReader } from '../../../utils/claude-session-reader';
 import { execFile } from 'child_process';
+import * as fs from 'fs';
 import * as path from 'path';
+import { html as diff2htmlHtml } from 'diff2html';
 
 export class CommandHandler {
   private authService: AuthService;
@@ -517,10 +519,30 @@ export class CommandHandler {
     }
   }
 
+  private diff2htmlCssCache: string | null = null;
+
+  private getDiff2HtmlCss(): string {
+    if (!this.diff2htmlCssCache) {
+      try {
+        const cssPath = require.resolve('diff2html/bundles/css/diff2html.min.css');
+        this.diff2htmlCssCache = fs.readFileSync(cssPath, 'utf-8');
+      } catch {
+        this.diff2htmlCssCache = '';
+      }
+    }
+    return this.diff2htmlCssCache;
+  }
+
   private generateDiffHtml(diff: string, projectName: string): string {
-    // Encode diff as base64 to avoid any escaping issues
-    const diffBase64 = Buffer.from(diff, 'utf-8').toString('base64');
     const safeProjectName = projectName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const css = this.getDiff2HtmlCss();
+
+    // Pre-render diff HTML on server — no JS or external resources needed
+    const renderedDiff = diff2htmlHtml(diff, {
+      outputFormat: 'line-by-line',
+      drawFileList: true,
+      matching: 'lines',
+    });
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -528,12 +550,7 @@ export class CommandHandler {
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Diff — ${safeProjectName}</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css"
-    media="(prefers-color-scheme: light)"/>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css"
-    media="(prefers-color-scheme: dark)"/>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css"/>
-  <script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
+  <style>${css}</style>
   <style>
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     .header { padding: 12px 16px; background: #1a1a2e; color: #eee; font-size: 14px; }
@@ -546,21 +563,7 @@ export class CommandHandler {
 </head>
 <body>
   <div class="header">📊 Diff — <strong>${safeProjectName}</strong></div>
-  <div id="app"></div>
-  <script id="diff-data" type="application/base64">${diffBase64}</script>
-  <script>
-    var encoded = document.getElementById('diff-data').textContent;
-    var patch = atob(encoded);
-    var ui = new Diff2HtmlUI(document.getElementById('app'), patch, {
-      outputFormat: 'line-by-line',
-      drawFileList: true,
-      highlight: true,
-      matching: 'lines',
-      colorScheme: 'auto',
-    });
-    ui.draw();
-    ui.highlightCode();
-  </script>
+  ${renderedDiff}
 </body>
 </html>`;
   }
