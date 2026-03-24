@@ -11,9 +11,9 @@
   "scripts": {
     "prebuild": "rimraf dist",
     "build": "tsc",
-    "start": "node dist/main.js",
-    "cli": "node dist/cli.js",
-    "dev": "DEBUG=* tsx src/main.ts",
+    "start": "vite-node dist/main.js",
+    "cli": "vite-node src/cli.ts",
+    "dev": "DEBUG=* vite-node --watch src/main.ts",
     "watch": "tsc --watch",
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" --fix",
@@ -61,7 +61,9 @@
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vite": "^7.3.1",
+    "vite-node": "^3.2.4"
   },
   "keywords": [
     "telegram",
