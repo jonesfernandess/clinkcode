@@ -3,13 +3,14 @@ import { IStorage } from '../../../storage/interface';
 import { MessageFormatter } from '../../../utils/formatter';
 import { ProjectHandler } from '../project/project-handler';
 import { FileBrowserHandler } from '../file-browser/file-browser-handler';
-import { UserState, ClaudeModel, AVAILABLE_MODELS } from '../../../models/types';
+import { UserState, AgentModel, getModelsForProvider, resolveModelForProvider } from '../../../models/types';
 import { PermissionManager } from '../../permission-manager';
 import { ClaudeSessionReader } from '../../../utils/claude-session-reader';
-import { ClaudeManager } from '../../claude';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
 import { TelegramSender } from '../../../services/telegram-sender';
 import { MESSAGES } from '../../../constants/messages';
+import { IAgentManager } from '../../agent-manager';
+import { Config } from '../../../config/config';
 
 export class CallbackHandler {
   private sessionReader: ClaudeSessionReader;
@@ -22,7 +23,8 @@ export class CallbackHandler {
     private fileBrowserHandler: FileBrowserHandler,
     private bot: Telegraf,
     private permissionManager: PermissionManager,
-    private claudeSDK: ClaudeManager
+    private claudeSDK: IAgentManager,
+    private config: Config
   ) {
     this.sessionReader = new ClaudeSessionReader();
     this.telegramSender = new TelegramSender(bot);
@@ -290,10 +292,11 @@ export class CallbackHandler {
 
   private async handleModelSelectCallback(data: string, chatId: number, messageId?: number): Promise<void> {
     try {
-      const selectedModel = data.replace('model_select:', '') as ClaudeModel;
+      const selectedModel = data.replace('model_select:', '') as AgentModel;
+      const availableModels = getModelsForProvider(this.config.agent.provider);
 
       // Validate model
-      const modelInfo = AVAILABLE_MODELS.find(m => m.value === selectedModel);
+      const modelInfo = availableModels.find(m => m.value === selectedModel);
       if (!modelInfo) {
         await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Invalid model selected.'), { parse_mode: 'MarkdownV2' });
         return;
@@ -306,7 +309,10 @@ export class CallbackHandler {
       }
 
       // Check if same model is selected
-      if (user.currentModel === selectedModel) {
+      const provider = this.config.agent.provider;
+      const resolvedCurrent = resolveModelForProvider(provider, user.currentModel);
+
+      if (resolvedCurrent === selectedModel) {
         if (messageId) {
           try { await this.bot.telegram.deleteMessage(chatId, messageId); } catch {}
         }
@@ -397,7 +403,7 @@ export class CallbackHandler {
         case 'onboarding_accept':
           user.setState(UserState.OnboardingModel);
           await this.storage.saveUserSession(user);
-          await ctx.reply(MESSAGES.ONBOARDING.MODEL_SELECTION, { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingModelKeyboard(user.currentModel) });
+          await ctx.reply(MESSAGES.ONBOARDING.MODEL_SELECTION, { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingModelKeyboard(user.currentModel, this.config.agent.provider) });
           break;
 
         case 'onboarding_decline':
@@ -432,11 +438,16 @@ export class CallbackHandler {
 
         default:
           if (data.startsWith('onboarding_model:')) {
-            const modelValue = data.replace('onboarding_model:', '') as ClaudeModel;
+            const modelValue = data.replace('onboarding_model:', '') as AgentModel;
+            const validOnboardingModel = getModelsForProvider(this.config.agent.provider).some((m) => m.value === modelValue);
+            if (!validOnboardingModel) {
+              await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Invalid model selected.'), { parse_mode: 'MarkdownV2' });
+              return;
+            }
             user.setModel(modelValue);
             await this.storage.saveUserSession(user);
             // Update keyboard with selection
-            await ctx.reply(MESSAGES.ONBOARDING.MODEL_SELECTION, { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingModelKeyboard(modelValue) });
+            await ctx.reply(MESSAGES.ONBOARDING.MODEL_SELECTION, { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingModelKeyboard(modelValue, this.config.agent.provider) });
           }
       }
     } catch (error) {

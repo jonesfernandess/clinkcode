@@ -1,0 +1,14 @@
+{
+  "6685765370": {
+    "chatId": 6685765370,
+    "state": "in_session",
+    "lastActivity": "2026-03-24T13:46:57.378Z",
+    "activeProject": "-Users-fernandofernandes",
+    "sessionId": "019d2017-4931-73c3-900c-6d28bc40f3e0",
+    "projectPath": "/Users/fernandofernandes",
+    "active": true,
+    "permissionMode": "default",
+    "authenticated": false,
+    "currentModel": "claude-opus-4-5-20251101"
+  }
+}

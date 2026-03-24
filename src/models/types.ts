@@ -13,6 +13,8 @@ export enum UserState {
   OnboardingProject = 'onboarding_project',
 }
 
+export type AgentProvider = 'claude' | 'codex';
+
 export enum ProjectType {
   GitHub = 'github',
   Directory = 'directory',
@@ -95,22 +97,50 @@ export interface FileBrowsingState {
   messageId?: number;
 }
 
-// Claude model types
+// Model types by provider
 export type ClaudeModel =
   | 'claude-sonnet-4-5-20250929'
   | 'claude-opus-4-5-20251101'
   | 'claude-haiku-4-5-20251001';
 
+export type CodexModel =
+  | 'gpt-5-codex'
+  | 'gpt-5'
+  | 'gpt-5-mini';
+
+export type AgentModel = ClaudeModel | CodexModel;
+
 export interface ModelInfo {
-  value: ClaudeModel;
+  value: AgentModel;
+  provider: AgentProvider;
   displayName: string;
   description: string;
 }
 
 export const AVAILABLE_MODELS: ModelInfo[] = [
-  { value: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5', description: 'Balanced' },
-  { value: 'claude-opus-4-5-20251101', displayName: 'Opus 4.5', description: 'Most capable' },
-  { value: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', description: 'Fastest' },
+  { value: 'claude-sonnet-4-5-20250929', provider: 'claude', displayName: 'Sonnet 4.5', description: 'Balanced' },
+  { value: 'claude-opus-4-5-20251101', provider: 'claude', displayName: 'Opus 4.5', description: 'Most capable' },
+  { value: 'claude-haiku-4-5-20251001', provider: 'claude', displayName: 'Haiku 4.5', description: 'Fastest' },
+  { value: 'gpt-5-codex', provider: 'codex', displayName: 'GPT-5 Codex', description: 'Coding optimized' },
+  { value: 'gpt-5', provider: 'codex', displayName: 'GPT-5', description: 'Most capable' },
+  { value: 'gpt-5-mini', provider: 'codex', displayName: 'GPT-5 Mini', description: 'Faster' },
 ];
 
-export const DEFAULT_MODEL: ClaudeModel = 'claude-opus-4-5-20251101';
+export const DEFAULT_PROVIDER: AgentProvider = 'claude';
+
+export const DEFAULT_MODELS: Record<AgentProvider, AgentModel> = {
+  claude: 'claude-opus-4-5-20251101',
+  codex: 'gpt-5-codex',
+};
+
+export const DEFAULT_MODEL: AgentModel = DEFAULT_MODELS[DEFAULT_PROVIDER];
+
+export function getModelsForProvider(provider: AgentProvider): ModelInfo[] {
+  return AVAILABLE_MODELS.filter((model) => model.provider === provider);
+}
+
+export function resolveModelForProvider(provider: AgentProvider, currentModel: AgentModel): AgentModel {
+  const providerModels = getModelsForProvider(provider);
+  const hasModel = providerModels.some((model) => model.value === currentModel);
+  return hasModel ? currentModel : DEFAULT_MODELS[provider];
+}

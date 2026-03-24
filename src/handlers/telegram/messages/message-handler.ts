@@ -5,12 +5,13 @@ import { IStorage } from '../../../storage/interface';
 import { GitHubManager } from '../../github';
 import { MessageFormatter } from '../../../utils/formatter';
 import { MESSAGES } from '../../../constants/messages';
-import { ClaudeManager } from '../../claude';
 import { ProjectHandler } from '../project/project-handler';
 import { FileBrowserHandler } from '../file-browser/file-browser-handler';
 import { TelegramSender } from '../../../services/telegram-sender';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
 import { Config } from '../../../config/config';
+import { IAgentManager } from '../../agent-manager';
+import { AgentMessage } from '../../../models/agent-message';
 
 export class MessageHandler {
   private telegramSender: TelegramSender;
@@ -19,7 +20,7 @@ export class MessageHandler {
     private storage: IStorage,
     private github: GitHubManager,
     private formatter: MessageFormatter,
-    private claudeSDK: ClaudeManager,
+    private claudeSDK: IAgentManager,
     private projectHandler: ProjectHandler,
     private bot: Telegraf,
     private config: Config,
@@ -174,14 +175,14 @@ export class MessageHandler {
     }
   }
 
-  async handleRegularMessage(chatId: number, message: any, permissionMode?: PermissionMode): Promise<void> {
+  async handleRegularMessage(chatId: number, message: AgentMessage, permissionMode?: PermissionMode): Promise<void> {
     await this.sendFormattedMessage(chatId, message, permissionMode);
   }
 
 
-  async sendFormattedMessage(chatId: number, message: any, permissionMode?: PermissionMode): Promise<void> {
+  async sendFormattedMessage(chatId: number, message: AgentMessage, permissionMode?: PermissionMode): Promise<void> {
     try {
-      const formattedMessage = await this.formatter.formatClaudeMessage(message, permissionMode);
+      const formattedMessage = await this.formatter.formatAgentMessage(message, permissionMode);
       if (formattedMessage) {
         await this.telegramSender.safeSendMessage(chatId, formattedMessage);
       }

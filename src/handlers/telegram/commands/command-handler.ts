@@ -1,11 +1,10 @@
 import { Context, Markup, Input } from 'telegraf';
 import { UserSessionModel } from '../../../models/user-session';
-import { UserState, PermissionMode, ClaudeModel, AVAILABLE_MODELS } from '../../../models/types';
+import { UserState, PermissionMode, AgentModel, getModelsForProvider, resolveModelForProvider } from '../../../models/types';
 import { IStorage } from '../../../storage/interface';
 import { MessageFormatter } from '../../../utils/formatter';
 import { MESSAGES } from '../../../constants/messages';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
-import { ClaudeManager } from '../../claude';
 import { AuthService } from '../../../services/auth-service';
 import { Config } from '../../../config/config';
 import { TelegramSender } from '../../../services/telegram-sender';
@@ -14,6 +13,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { html as diff2htmlHtml } from 'diff2html';
+import { IAgentManager } from '../../agent-manager';
 
 export class CommandHandler {
   private authService: AuthService;
@@ -23,7 +23,7 @@ export class CommandHandler {
   constructor(
     private storage: IStorage,
     private formatter: MessageFormatter,
-    private claudeSDK: ClaudeManager,
+    private claudeSDK: IAgentManager,
     private config: Config,
     private bot: any
   ) {
@@ -89,7 +89,7 @@ export class CommandHandler {
         await ctx.reply(MESSAGES.ONBOARDING.DISCLAIMER, { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingDisclaimerKeyboard() });
         break;
       case UserState.OnboardingModel:
-        await ctx.reply(MESSAGES.ONBOARDING.MODEL_SELECTION, { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingModelKeyboard(user.currentModel) });
+        await ctx.reply(MESSAGES.ONBOARDING.MODEL_SELECTION, { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingModelKeyboard(user.currentModel, this.config.agent.provider) });
         break;
       case UserState.OnboardingProject:
         await ctx.reply(MESSAGES.ONBOARDING.PROJECT_GUIDE, { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingProjectKeyboard() });
@@ -402,7 +402,8 @@ export class CommandHandler {
 
     if (modelArg) {
       // Try to find matching model
-      const matchedModel = AVAILABLE_MODELS.find(
+      const models = getModelsForProvider(this.config.agent.provider);
+      const matchedModel = models.find(
         m => m.displayName.toLowerCase().includes(modelArg) ||
              m.value.toLowerCase().includes(modelArg)
       );
@@ -417,18 +418,30 @@ export class CommandHandler {
     }
 
     // Show current model and selection keyboard
-    const currentModel = AVAILABLE_MODELS.find(m => m.value === user.currentModel);
+    const models = getModelsForProvider(this.config.agent.provider);
+    const resolvedModel = resolveModelForProvider(this.config.agent.provider, user.currentModel);
+    if (resolvedModel !== user.currentModel) {
+      user.setModel(resolvedModel);
+      await this.storage.saveUserSession(user);
+    }
+    const currentModel = models.find(m => m.value === resolvedModel);
     const currentModelName = currentModel?.displayName || user.currentModel;
 
     const text = `🤖 Current model: **${currentModelName}**\n\nSelect a model:`;
-    await this.telegramSender.safeSendMessage(chatId, text, KeyboardFactory.createModelSelectionKeyboard(user.currentModel));
+    await this.telegramSender.safeSendMessage(chatId, text, KeyboardFactory.createModelSelectionKeyboard(resolvedModel, this.config.agent.provider));
   }
 
-  async handleModelChange(ctx: Context, model: ClaudeModel): Promise<void> {
+  async handleModelChange(ctx: Context, model: AgentModel): Promise<void> {
     if (!ctx.chat) return;
 
     const chatId = ctx.chat.id;
     const user = await this.getOrCreateUser(chatId);
+    const availableModels = getModelsForProvider(this.config.agent.provider);
+    const isValidModel = availableModels.some((m) => m.value === model);
+    if (!isValidModel) {
+      await ctx.reply(this.formatter.formatError('Invalid model for current provider.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
 
     try {
       // Check if Claude is currently running and abort if needed
@@ -444,7 +457,7 @@ export class CommandHandler {
       user.setModel(model);
       await this.storage.saveUserSession(user);
 
-      const modelInfo = AVAILABLE_MODELS.find(m => m.value === model);
+      const modelInfo = availableModels.find(m => m.value === model);
       const modelName = modelInfo?.displayName || model;
 
       const finalMessage = abortMessage

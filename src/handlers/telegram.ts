@@ -3,11 +3,12 @@ import { PermissionMode } from '../models/types';
 import { IStorage } from '../storage/interface';
 import { GitHubManager } from './github';
 import { DirectoryManager } from './directory';
-import { ClaudeManager } from './claude';
 import { MessageFormatter } from '../utils/formatter';
 import { message } from 'telegraf/filters';
 import { Config } from '../config/config';
 import { PermissionManager } from './permission-manager';
+import { AgentMessage } from '../models/agent-message';
+import { AgentToolInfo, IAgentManager } from './agent-manager';
 
 // Import handlers
 import { CommandHandler } from './telegram/commands/command-handler';
@@ -22,7 +23,7 @@ export class TelegramHandler {
   private github: GitHubManager;
   private directory: DirectoryManager;
   private storage: IStorage;
-  private claudeSDK: ClaudeManager;
+  private claudeSDK: IAgentManager;
   private formatter: MessageFormatter;
   private config: Config;
   private permissionManager: PermissionManager;
@@ -39,7 +40,7 @@ export class TelegramHandler {
     bot: Telegraf,
     github: GitHubManager,
     directory: DirectoryManager,
-    claudeSDK: ClaudeManager,
+    claudeSDK: IAgentManager,
     storage: IStorage,
     formatter: MessageFormatter,
     config: Config,
@@ -60,13 +61,13 @@ export class TelegramHandler {
     this.toolHandler = new ToolHandler(this.storage, this.formatter, this.config, this.bot, this.claudeSDK);
     this.fileBrowserHandler = new FileBrowserHandler(this.storage, this.directory, this.formatter, this.config, this.bot);
     this.messageHandler = new MessageHandler(this.storage, this.github, this.formatter, this.claudeSDK, this.projectHandler, this.bot, this.config, this.fileBrowserHandler);
-    this.callbackHandler = new CallbackHandler(this.formatter, this.projectHandler, this.storage, this.fileBrowserHandler, this.bot, this.permissionManager, this.claudeSDK);
+    this.callbackHandler = new CallbackHandler(this.formatter, this.projectHandler, this.storage, this.fileBrowserHandler, this.bot, this.permissionManager, this.claudeSDK, this.config);
 
 
     this.setupHandlers();
   }
 
-  public async handleClaudeResponse(userId: string, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string): Promise<void> {
+  public async handleClaudeResponse(userId: string, message: AgentMessage | null, toolInfo?: AgentToolInfo, parentToolUseId?: string): Promise<void> {
     const chatId = parseInt(userId);
     if (isNaN(chatId)) return;
 
@@ -137,7 +138,7 @@ export class TelegramHandler {
     this.bot.on('callback_query', (ctx) => this.callbackHandler.handleCallback(ctx));
   }
 
-  public async handleClaudeMessage(chatId: number, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string): Promise<void> {
+  public async handleClaudeMessage(chatId: number, message: AgentMessage, toolInfo?: AgentToolInfo, parentToolUseId?: string): Promise<void> {
     const user = await this.storage.getUserSession(chatId);
     if (!user || !user.sessionId) return;
 

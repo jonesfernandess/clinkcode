@@ -6,10 +6,12 @@ import { IStorage } from './storage/interface';
 import { GitHubManager } from './handlers/github';
 import { DirectoryManager } from './handlers/directory';
 import { ClaudeManager } from './handlers/claude';
+import { CodexManager } from './handlers/codex';
 import { TelegramHandler } from './handlers/telegram';
 import { ExpressServer } from './server/express';
 import { MessageFormatter } from './utils/formatter';
 import { PermissionManager } from './handlers/permission-manager';
+import { IAgentManager } from './handlers/agent-manager';
 
 async function main(): Promise<void> {
   try {
@@ -42,15 +44,30 @@ async function main(): Promise<void> {
     let telegramHandler: TelegramHandler;
 
     // Initialize SDK manager with callback architecture
-    const claudeSDK = new ClaudeManager(storage, permissionManager, {
+    const callbacks = {
       onClaudeResponse: async (userId: string, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string) => {
         await telegramHandler.handleClaudeResponse(userId, message, toolInfo, parentToolUseId);
       },
       onClaudeError: async (userId: string, error: string) => {
         await telegramHandler.handleClaudeError(userId, error);
       }
-    }, config.claudeCode.binaryPath);
-    console.log('Claude SDK manager initialized');
+    };
+
+    let claudeSDK: IAgentManager;
+    if (config.agent.provider === 'codex') {
+      const codexOptions = {
+        ...(config.codex.binaryPath ? { codexPathOverride: config.codex.binaryPath } : {}),
+        ...(config.codex.apiKey ? { apiKey: config.codex.apiKey } : {}),
+        ...(config.codex.baseUrl ? { baseUrl: config.codex.baseUrl } : {}),
+      };
+      claudeSDK = new CodexManager(storage, callbacks, {
+        ...codexOptions,
+      });
+      console.log('Codex SDK manager initialized');
+    } else {
+      claudeSDK = new ClaudeManager(storage, permissionManager, callbacks, config.claudeCode.binaryPath);
+      console.log('Claude SDK manager initialized');
+    }
 
     // Create Telegram handler with callback architecture
     telegramHandler = new TelegramHandler(
@@ -87,7 +104,7 @@ async function main(): Promise<void> {
       { command: 'createproject', description: 'Create a new project' },
       { command: 'listproject', description: 'Browse existing projects' },
       { command: 'exitproject', description: 'Exit current project' },
-      { command: 'model', description: 'Change Claude model' },
+      { command: 'model', description: 'Change model' },
       { command: 'resume', description: 'Resume a previous session' },
       { command: 'clear', description: 'Clear current session' },
       { command: 'abort', description: 'Abort current query' },
@@ -138,7 +155,7 @@ async function main(): Promise<void> {
 
 async function gracefulShutdown(
   bot: Telegraf,
-  claudeSDK: ClaudeManager,
+  claudeSDK: IAgentManager,
   storage: IStorage
 ): Promise<void> {
   console.log('Received shutdown signal, shutting down gracefully...');

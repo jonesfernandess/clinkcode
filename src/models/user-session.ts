@@ -1,4 +1,4 @@
-import { UserState, PermissionMode, FileBrowsingState, ClaudeModel, DEFAULT_MODEL } from './types';
+import { UserState, PermissionMode, FileBrowsingState, AgentModel, DEFAULT_MODEL } from './types';
 import { isOnboardingCompleted, markOnboardingCompleted, resetOnboardingStatus } from '../services/onboarding-store';
 
 export interface UserSession {
@@ -27,7 +27,7 @@ export interface UserSession {
   authenticated: boolean;
 
   // Model selection
-  currentModel: ClaudeModel;
+  currentModel: AgentModel;
 }
 
 export class UserSessionModel {
@@ -41,7 +41,7 @@ export class UserSessionModel {
   permissionMode: PermissionMode;
   fileBrowsingState?: FileBrowsingState;
   authenticated: boolean;
-  currentModel: ClaudeModel;
+  currentModel: AgentModel;
 
   constructor(chatId: number) {
     this.chatId = chatId;
@@ -125,12 +125,12 @@ export class UserSessionModel {
   }
 
   // Model selection methods
-  setModel(model: ClaudeModel): void {
+  setModel(model: AgentModel): void {
     this.currentModel = model;
     this.updateActivity();
   }
 
-  getModel(): ClaudeModel {
+  getModel(): AgentModel {
     return this.currentModel;
   }
 
