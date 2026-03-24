@@ -20,7 +20,7 @@ export class MessageHandler {
     private storage: IStorage,
     private github: GitHubManager,
     private formatter: MessageFormatter,
-    private claudeSDK: IAgentManager,
+    private agentManager: IAgentManager,
     private projectHandler: ProjectHandler,
     private bot: Telegraf,
     private config: Config,
@@ -72,7 +72,7 @@ export class MessageHandler {
   async handleSessionInput(ctx: Context, user: UserSessionModel, text: string): Promise<void> {
     try {
       await ctx.reply('Processing...', KeyboardFactory.createCompletionKeyboard());
-      await this.claudeSDK.addMessageToStream(user.chatId, text);
+      await this.agentManager.addMessageToStream(user.chatId, text);
     } catch (error) {
       await ctx.reply(this.formatter.formatError(MESSAGES.ERRORS.SEND_INPUT_FAILED(error instanceof Error ? error.message : 'Unknown error')), { parse_mode: 'MarkdownV2' });
     }
@@ -103,7 +103,7 @@ export class MessageHandler {
       const caption = 'caption' in ctx.message ? (ctx.message.caption as string) : undefined;
 
       await ctx.reply('Processing image...', KeyboardFactory.createCompletionKeyboard());
-      await this.claudeSDK.addImageMessageToStream(chatId, base64Data, 'image/jpeg', caption);
+      await this.agentManager.addImageMessageToStream(chatId, base64Data, 'image/jpeg', caption);
     } catch (error) {
       await ctx.reply(this.formatter.formatError('Failed to process image. Please try again.'), { parse_mode: 'MarkdownV2' });
       console.error('Error processing photo:', error);
@@ -169,7 +169,7 @@ export class MessageHandler {
       await this.storage.saveUserSession(user);
 
       await ctx.reply('Processing...', KeyboardFactory.createCompletionKeyboard());
-      await this.claudeSDK.addMessageToStream(user.chatId, text);
+      await this.agentManager.addMessageToStream(user.chatId, text);
     } catch (error) {
       await ctx.reply(this.formatter.formatError(MESSAGES.ERRORS.SEND_INPUT_FAILED(error instanceof Error ? error.message : 'Unknown error')), { parse_mode: 'MarkdownV2' });
     }
@@ -187,7 +187,7 @@ export class MessageHandler {
         await this.telegramSender.safeSendMessage(chatId, formattedMessage);
       }
     } catch (error) {
-      console.error('Error handling Claude message:', error);
+      console.error('Error handling Agent message:', error);
     }
   }
 

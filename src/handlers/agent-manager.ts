@@ -8,8 +8,8 @@ export interface AgentToolInfo {
 }
 
 export interface AgentCallbacks {
-  onClaudeResponse: (userId: string, message: AgentMessage | null, toolInfo?: AgentToolInfo, parentToolUseId?: string) => Promise<void>;
-  onClaudeError: (userId: string, error: string) => void;
+  onAgentResponse: (userId: string, message: AgentMessage | null, toolInfo?: AgentToolInfo, parentToolUseId?: string) => Promise<void>;
+  onAgentError: (userId: string, error: string) => void;
 }
 
 export interface IAgentManager {
@@ -19,4 +19,3 @@ export interface IAgentManager {
   isQueryRunning(chatId: number): boolean;
   shutdown(): Promise<void>;
 }
-

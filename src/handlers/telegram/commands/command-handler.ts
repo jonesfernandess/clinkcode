@@ -8,7 +8,7 @@ import { KeyboardFactory } from '../keyboards/keyboard-factory';
 import { AuthService } from '../../../services/auth-service';
 import { Config } from '../../../config/config';
 import { TelegramSender } from '../../../services/telegram-sender';
-import { ClaudeSessionReader } from '../../../utils/claude-session-reader';
+import { AgentSessionReader } from '../../../utils/agent-session-reader';
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -18,18 +18,18 @@ import { IAgentManager } from '../../agent-manager';
 export class CommandHandler {
   private authService: AuthService;
   private telegramSender: TelegramSender;
-  private sessionReader: ClaudeSessionReader;
+  private sessionReader: AgentSessionReader;
 
   constructor(
     private storage: IStorage,
     private formatter: MessageFormatter,
-    private claudeSDK: IAgentManager,
+    private agentManager: IAgentManager,
     private config: Config,
     private bot: any
   ) {
     this.authService = new AuthService(config);
     this.telegramSender = new TelegramSender(bot);
-    this.sessionReader = new ClaudeSessionReader();
+    this.sessionReader = new AgentSessionReader();
   }
 
   async handleStart(ctx: Context): Promise<void> {
@@ -132,17 +132,17 @@ export class CommandHandler {
     const user = await this.getOrCreateUser(chatId);
 
     try {
-      // Read projects from Claude Code's ~/.claude/projects/ directory
-      const claudeProjects = await this.sessionReader.listAllProjects(20);
+      // Read projects from the local provider session catalog (~/.claude/projects by default).
+      const catalogProjects = await this.sessionReader.listAllProjects(20);
 
-      if (claudeProjects.length === 0) {
+      if (catalogProjects.length === 0) {
         const text = `📋 *Projects*\n\nNo existing projects found. Create one to get started:`;
-        await ctx.reply(text, { parse_mode: 'Markdown', ...KeyboardFactory.createClaudeProjectListKeyboard([]) });
+        await ctx.reply(text, { parse_mode: 'Markdown', ...KeyboardFactory.createProjectCatalogKeyboard([]) });
         return;
       }
 
-      const listText = `📋 *Projects (${claudeProjects.length})*\n\nSelect a project or create a new one:`;
-      await ctx.reply(listText, { parse_mode: 'Markdown', ...KeyboardFactory.createClaudeProjectListKeyboard(claudeProjects) });
+      const listText = `📋 *Projects (${catalogProjects.length})*\n\nSelect a project or create a new one:`;
+      await ctx.reply(listText, { parse_mode: 'Markdown', ...KeyboardFactory.createProjectCatalogKeyboard(catalogProjects) });
     } catch (error) {
       await ctx.reply(this.formatter.formatError('Failed to load projects. Please try again.'), { parse_mode: 'MarkdownV2' });
       console.error('Error loading projects:', error);
@@ -166,7 +166,7 @@ export class CommandHandler {
       const projectName = project?.name || 'Unknown Project';
       
       // Clean up active streams before ending session
-      this.claudeSDK.abortQuery(chatId);
+      this.agentManager.abortQuery(chatId);
       
       user.endSession();
       user.clearActiveProject();
@@ -248,9 +248,9 @@ export class CommandHandler {
     try {
       delete user.sessionId;
       await this.storage.saveUserSession(user);
-      await this.claudeSDK.abortQuery(chatId);
+      await this.agentManager.abortQuery(chatId);
 
-      await ctx.reply('✅ Session cleared. Your Claude Code session has been reset.');
+      await ctx.reply('✅ Session cleared. Your AI coding agent session has been reset.');
     } catch (error) {
       await ctx.reply(this.formatter.formatError('Failed to clear session. Please try again.'), { parse_mode: 'MarkdownV2' });
       console.error('Error clearing session:', error);
@@ -274,11 +274,11 @@ export class CommandHandler {
       const sessions = await this.sessionReader.listProjectSessions(user.activeProject, 10);
 
       if (sessions.length === 0) {
-        await ctx.reply('📋 No Claude Code sessions found for this project.\n\nStart chatting to create a new session!');
+        await ctx.reply('📋 No AI coding agent sessions found for this project.\n\nStart chatting to create a new session!');
         return;
       }
 
-      const listText = `📋 Claude Code Sessions (${sessions.length})\n\nSelect a session to resume:`;
+      const listText = `📋 Agent Sessions (${sessions.length})\n\nSelect a session to resume:`;
       await ctx.reply(listText, KeyboardFactory.createSessionListKeyboard(sessions));
     } catch (error) {
       await ctx.reply(this.formatter.formatError('Failed to load sessions. Please try again.'), { parse_mode: 'MarkdownV2' });
@@ -293,7 +293,7 @@ export class CommandHandler {
     const user = await this.getOrCreateUser(chatId);
 
     try {
-      const success = await this.claudeSDK.abortQuery(chatId);
+      const success = await this.agentManager.abortQuery(chatId);
 
       if (success) {
         await ctx.reply('🛑 Query aborted successfully. You can send a new message now.');
@@ -353,13 +353,13 @@ export class CommandHandler {
     }
 
     try {
-      // Check if Claude is currently running and abort if needed
+      // Check if Agent is currently running and abort if needed
       let abortMessage = '';
-      if (this.claudeSDK.isQueryRunning(chatId)) {
-        const abortSuccess = await this.claudeSDK.abortQuery(chatId);
+      if (this.agentManager.isQueryRunning(chatId)) {
+        const abortSuccess = await this.agentManager.abortQuery(chatId);
         
         if (abortSuccess) {
-          abortMessage = '🛑 Current Claude has been stopped.\n';
+          abortMessage = '🛑 Current agent query has been stopped.\n';
         }
       }
 
@@ -369,20 +369,20 @@ export class CommandHandler {
       const modeNames = {
         [PermissionMode.Default]: 'Default - Standard behavior with permission prompts for each tool on first use',
         [PermissionMode.AcceptEdits]: 'Accept Edits - Automatically accept file edit permissions for the session',
-        [PermissionMode.Plan]: 'Plan - Claude can analyze but cannot modify files or execute commands',
+        [PermissionMode.Plan]: 'Plan - the agent can analyze but cannot modify files or execute commands',
         [PermissionMode.BypassPermissions]: 'Bypass Permissions - Skip all permission prompts (requires secure environment)'
       };
 
       const modeName = modeNames[mode];
       const finalMessage = abortMessage 
-        ? `${abortMessage}✅ Permission mode changed to: \n**${modeName}**\n🔄 Claude session is resuming with the new permission mode.`
+        ? `${abortMessage}✅ Permission mode changed to: \n**${modeName}**\n🔄 Agent session is resuming with the new permission mode.`
         : `✅ Permission mode changed to: \n**${modeName}**\nThe new permission mode is now active.`;
 
       await this.telegramSender.safeSendMessage(ctx.chat.id, finalMessage);
       
-      // If we aborted a query, send a continue message to restart Claude session
+      // If we aborted a query, send a continue message to restart Agent session
       if (abortMessage) {
-        this.claudeSDK.addMessageToStream(chatId, 'continue');
+        this.agentManager.addMessageToStream(chatId, 'continue');
       }
     } catch (error) {
       await ctx.reply(this.formatter.formatError('Failed to change permission mode. Please try again.'), { parse_mode: 'MarkdownV2' });
@@ -444,10 +444,10 @@ export class CommandHandler {
     }
 
     try {
-      // Check if Claude is currently running and abort if needed
+      // Check if Agent is currently running and abort if needed
       let abortMessage = '';
-      if (this.claudeSDK.isQueryRunning(chatId)) {
-        const abortSuccess = await this.claudeSDK.abortQuery(chatId);
+      if (this.agentManager.isQueryRunning(chatId)) {
+        const abortSuccess = await this.agentManager.abortQuery(chatId);
         if (abortSuccess) {
           abortMessage = '🛑 Current query has been stopped.\n';
         }

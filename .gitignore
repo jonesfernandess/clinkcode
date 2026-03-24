@@ -76,3 +76,8 @@ workers/wrangler.toml
 test
 __pycache__
 .dmux/
+
+
+onboarding.json
+projects.json
+sessions.json

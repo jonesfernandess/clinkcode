@@ -28,13 +28,13 @@ interface QueuedInput {
 export class CodexManager implements IAgentManager {
   private storage: IStorage;
   private streamManager = new StreamManager<QueuedInput>();
-  private onClaudeResponse: (
+  private onAgentResponse: (
     userId: string,
     message: AgentMessage | null,
     toolInfo?: AgentToolInfo,
     parentToolUseId?: string,
   ) => Promise<void>;
-  private onClaudeError: (userId: string, error: string) => void;
+  private onAgentError: (userId: string, error: string) => void;
   private codex: Codex;
   private threads = new Map<number, Thread>();
 
@@ -44,8 +44,8 @@ export class CodexManager implements IAgentManager {
     options?: CodexOptions,
   ) {
     this.storage = storage;
-    this.onClaudeResponse = callbacks.onClaudeResponse;
-    this.onClaudeError = callbacks.onClaudeError;
+    this.onAgentResponse = callbacks.onAgentResponse;
+    this.onAgentError = callbacks.onAgentError;
     this.codex = new Codex(options);
   }
 
@@ -69,7 +69,7 @@ export class CodexManager implements IAgentManager {
     _mediaType: string,
     _caption?: string,
   ): Promise<void> {
-    this.onClaudeError(
+    this.onAgentError(
       chatId.toString(),
       "Image input is not supported yet in Codex mode.",
     );
@@ -97,7 +97,7 @@ export class CodexManager implements IAgentManager {
     this.processQueue(chatId, stream, controller).catch((error) => {
       const message =
         error instanceof Error ? error.message : "Unknown Codex error";
-      this.onClaudeError(chatId.toString(), message);
+      this.onAgentError(chatId.toString(), message);
     });
   }
 
@@ -132,7 +132,7 @@ export class CodexManager implements IAgentManager {
           subtype: "success",
           duration_ms: Date.now() - start,
         };
-        await this.onClaudeResponse(chatId.toString(), resultMessage);
+        await this.onAgentResponse(chatId.toString(), resultMessage);
         await this.storage.updateSessionActivity(userSession);
       }
     } catch (error) {
@@ -141,7 +141,7 @@ export class CodexManager implements IAgentManager {
       }
       throw error;
     } finally {
-      await this.onClaudeResponse(
+      await this.onAgentResponse(
         chatId.toString(),
         null,
         undefined,
@@ -208,7 +208,7 @@ export class CodexManager implements IAgentManager {
     ) {
       const { message, toolInfo, parentToolUseId } = this.mapItemEvent(event);
       if (message) {
-        await this.onClaudeResponse(
+        await this.onAgentResponse(
           chatId.toString(),
           message,
           toolInfo,
@@ -221,7 +221,7 @@ export class CodexManager implements IAgentManager {
     if (event.type === "turn.failed" || event.type === "error") {
       const errorMessage =
         event.type === "turn.failed" ? event.error.message : event.message;
-      this.onClaudeError(chatId.toString(), errorMessage);
+      this.onAgentError(chatId.toString(), errorMessage);
     }
   }
 

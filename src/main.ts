@@ -43,30 +43,30 @@ async function main(): Promise<void> {
     // First create a placeholder handler that we'll set up later
     let telegramHandler: TelegramHandler;
 
-    // Initialize SDK manager with callback architecture
+    // Initialize agent manager with callback architecture
     const callbacks = {
-      onClaudeResponse: async (userId: string, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string) => {
-        await telegramHandler.handleClaudeResponse(userId, message, toolInfo, parentToolUseId);
+      onAgentResponse: async (userId: string, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string) => {
+        await telegramHandler.handleAgentResponse(userId, message, toolInfo, parentToolUseId);
       },
-      onClaudeError: async (userId: string, error: string) => {
-        await telegramHandler.handleClaudeError(userId, error);
+      onAgentError: async (userId: string, error: string) => {
+        await telegramHandler.handleAgentError(userId, error);
       }
     };
 
-    let claudeSDK: IAgentManager;
+    let agentManager: IAgentManager;
     if (config.agent.provider === 'codex') {
       const codexOptions = {
         ...(config.codex.binaryPath ? { codexPathOverride: config.codex.binaryPath } : {}),
         ...(config.codex.apiKey ? { apiKey: config.codex.apiKey } : {}),
         ...(config.codex.baseUrl ? { baseUrl: config.codex.baseUrl } : {}),
       };
-      claudeSDK = new CodexManager(storage, callbacks, {
+      agentManager = new CodexManager(storage, callbacks, {
         ...codexOptions,
       });
-      console.log('Codex SDK manager initialized');
+      console.log('Codex agent manager initialized');
     } else {
-      claudeSDK = new ClaudeManager(storage, permissionManager, callbacks, config.claudeCode.binaryPath);
-      console.log('Claude SDK manager initialized');
+      agentManager = new ClaudeManager(storage, permissionManager, callbacks, config.agentCli.binaryPath);
+      console.log('Claude manager initialized');
     }
 
     // Create Telegram handler with callback architecture
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
       bot,
       github,
       directory,
-      claudeSDK,
+      agentManager,
       storage,
       messageFormatter,
       config,
@@ -144,8 +144,8 @@ async function main(): Promise<void> {
     }
 
     // Handle graceful shutdown (register after successful startup)
-    process.once('SIGINT', () => gracefulShutdown(bot, claudeSDK, storage));
-    process.once('SIGTERM', () => gracefulShutdown(bot, claudeSDK, storage));
+    process.once('SIGINT', () => gracefulShutdown(bot, agentManager, storage));
+    process.once('SIGTERM', () => gracefulShutdown(bot, agentManager, storage));
   } catch (error) {
     console.error('Failed to start application:', error);
     process.exit(1);
@@ -155,7 +155,7 @@ async function main(): Promise<void> {
 
 async function gracefulShutdown(
   bot: Telegraf,
-  claudeSDK: IAgentManager,
+  agentManager: IAgentManager,
   storage: IStorage
 ): Promise<void> {
   console.log('Received shutdown signal, shutting down gracefully...');
@@ -164,8 +164,8 @@ async function gracefulShutdown(
     // Stop the bot
     bot.stop('SIGINT');
 
-    // Shutdown SDK manager
-    await claudeSDK.shutdown();
+    // Shutdown agent manager
+    await agentManager.shutdown();
 
     // Disconnect storage
     await storage.disconnect();

@@ -22,7 +22,7 @@ export class ToolHandler {
     private formatter: MessageFormatter,
     private config: Config,
     private bot: Telegraf,
-    private claudeManager?: IAgentManager
+    private agentManager?: IAgentManager
   ) {
     this.telegramSender = new TelegramSender(bot);
   }
@@ -321,12 +321,12 @@ export class ToolHandler {
   }
 
   private async abortAndContinue(chatId: number): Promise<void> {
-    if (this.claudeManager) {
+    if (this.agentManager) {
       // Abort the current request
-      await this.claudeManager.abortQuery(chatId);
+      await this.agentManager.abortQuery(chatId);
       
       // Send a continue message
-      await this.claudeManager.addMessageToStream(chatId, 'continue');
+      await this.agentManager.addMessageToStream(chatId, 'continue');
     }
   }
 }

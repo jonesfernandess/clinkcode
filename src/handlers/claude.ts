@@ -11,8 +11,8 @@ export class ClaudeManager implements IAgentManager {
   private permissionManager: PermissionManager;
   private streamManager = new StreamManager<AgentUserMessage>();
   private binaryPath: string | undefined;
-  private onClaudeResponse: (userId: string, message: AgentMessage | null, toolInfo?: AgentToolInfo, parentToolUseId?: string) => Promise<void>;
-  private onClaudeError: (userId: string, error: string) => void;
+  private onAgentResponse: (userId: string, message: AgentMessage | null, toolInfo?: AgentToolInfo, parentToolUseId?: string) => Promise<void>;
+  private onAgentError: (userId: string, error: string) => void;
 
   constructor(
     storage: IStorage,
@@ -22,8 +22,8 @@ export class ClaudeManager implements IAgentManager {
   ) {
     this.storage = storage;
     this.permissionManager = permissionManager;
-    this.onClaudeResponse = callbacks.onClaudeResponse;
-    this.onClaudeError = callbacks.onClaudeError;
+    this.onAgentResponse = callbacks.onAgentResponse;
+    this.onAgentError = callbacks.onAgentError;
     this.binaryPath = binaryPath;
   }
 
@@ -116,7 +116,7 @@ export class ClaudeManager implements IAgentManager {
         const toolInfo = this.extractToolInfo(message as AgentMessage);
         const parentToolUseId = (message as any).parent_tool_use_id || undefined;
 
-        await this.onClaudeResponse(chatId.toString(), message as AgentMessage, toolInfo, parentToolUseId);
+        await this.onAgentResponse(chatId.toString(), message as AgentMessage, toolInfo, parentToolUseId);
       }
     } catch (error) {
       // Don't throw error if it's caused by abort
@@ -124,11 +124,11 @@ export class ClaudeManager implements IAgentManager {
         return;
       }
 
-      this.onClaudeError?.(chatId.toString(), error instanceof Error ? error.message : 'Unknown error');
+      this.onAgentError?.(chatId.toString(), error instanceof Error ? error.message : 'Unknown error');
       throw error;
     } finally {
       // Signal completion with null message to indicate completion
-      this.onClaudeResponse(chatId.toString(), null, undefined, undefined);
+      this.onAgentResponse(chatId.toString(), null, undefined, undefined);
     }
 
     await this.storage.updateSessionActivity(userSession);

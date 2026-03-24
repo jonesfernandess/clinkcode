@@ -5,7 +5,7 @@ import { ProjectHandler } from '../project/project-handler';
 import { FileBrowserHandler } from '../file-browser/file-browser-handler';
 import { UserState, AgentModel, getModelsForProvider, resolveModelForProvider } from '../../../models/types';
 import { PermissionManager } from '../../permission-manager';
-import { ClaudeSessionReader } from '../../../utils/claude-session-reader';
+import { AgentSessionReader } from '../../../utils/agent-session-reader';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
 import { TelegramSender } from '../../../services/telegram-sender';
 import { MESSAGES } from '../../../constants/messages';
@@ -13,7 +13,7 @@ import { IAgentManager } from '../../agent-manager';
 import { Config } from '../../../config/config';
 
 export class CallbackHandler {
-  private sessionReader: ClaudeSessionReader;
+  private sessionReader: AgentSessionReader;
   private telegramSender: TelegramSender;
 
   constructor(
@@ -23,10 +23,10 @@ export class CallbackHandler {
     private fileBrowserHandler: FileBrowserHandler,
     private bot: Telegraf,
     private permissionManager: PermissionManager,
-    private claudeSDK: IAgentManager,
+    private agentManager: IAgentManager,
     private config: Config
   ) {
-    this.sessionReader = new ClaudeSessionReader();
+    this.sessionReader = new AgentSessionReader();
     this.telegramSender = new TelegramSender(bot);
   }
 
@@ -67,8 +67,8 @@ export class CallbackHandler {
       await this.projectHandler.handleProjectTypeSelection(data, chatId);
     } else if (data?.startsWith('project_select_')) {
       await this.handleProjectSelection(data, chatId, messageId);
-    } else if (data?.startsWith('claude_project_')) {
-      await this.handleClaudeProjectSelection(data, chatId, messageId);
+    } else if (data?.startsWith('project_catalog_')) {
+      await this.handleAgentProjectSelection(data, chatId, messageId);
     } else if (data?.startsWith('session_select_')) {
       await this.handleSessionSelection(data, chatId, messageId);
     } else if (data === 'cancel') {
@@ -99,7 +99,7 @@ export class CallbackHandler {
         }
         if (text) {
           await this.bot.telegram.sendMessage(chatId, 'Processing...', KeyboardFactory.createCompletionKeyboard());
-          await this.claudeSDK.addMessageToStream(chatId, text);
+          await this.agentManager.addMessageToStream(chatId, text);
         }
       } else if (data === 'asr_edit') {
         user.setState(UserState.WaitingASREdit);
@@ -137,9 +137,9 @@ export class CallbackHandler {
     }
   }
 
-  private async handleClaudeProjectSelection(data: string, chatId: number, messageId?: number): Promise<void> {
+  private async handleAgentProjectSelection(data: string, chatId: number, messageId?: number): Promise<void> {
     try {
-      const shortId = data.replace('claude_project_', '');
+      const shortId = data.replace('project_catalog_', '');
       const user = await this.storage.getUserSession(chatId);
 
       if (!user) {
@@ -147,7 +147,7 @@ export class CallbackHandler {
         return;
       }
 
-      // Find the full project from Claude projects list
+      // Find the full project from agent projects list
       const projects = await this.sessionReader.listAllProjects(50);
       const project = projects.find(p => p.id === shortId || p.id.endsWith(shortId));
 
@@ -186,10 +186,10 @@ export class CallbackHandler {
 
       await this.bot.telegram.sendMessage(
         chatId,
-        `🚀 Selected project "${project.name}".\n📂 Path: ${project.path}\n\nYou can now chat with Claude Code!`
+        `🚀 Selected project "${project.name}".\n📂 Path: ${project.path}\n\nYou can now chat with the AI coding agent!`
       );
     } catch (error) {
-      console.error('Error handling Claude project selection:', error);
+      console.error('Error handling agent project selection:', error);
       await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Failed to select project. Please try again.'), { parse_mode: 'MarkdownV2' });
     }
   }
@@ -204,7 +204,7 @@ export class CallbackHandler {
         return;
       }
 
-      // Set the Claude Code session ID to resume
+      // Set the AI coding agent session ID to resume
       user.sessionId = sessionId;
       user.setState(UserState.InSession);
       user.setActive(true);
@@ -221,7 +221,7 @@ export class CallbackHandler {
 
       await this.bot.telegram.sendMessage(
         chatId,
-        `🔄 Session resumed! You can continue your conversation with Claude Code.\n\nSession ID: \`${sessionId.substring(0, 8)}...\``,
+        `🔄 Session resumed! You can continue your conversation with the AI coding agent.\n\nSession ID: \`${sessionId.substring(0, 8)}...\``,
         { parse_mode: 'Markdown' }
       );
     } catch (error) {
@@ -268,7 +268,7 @@ export class CallbackHandler {
 
       await this.bot.telegram.sendMessage(
         chatId, 
-        `🚀 Selected project "${project.name}". You can now chat with Claude Code!`
+        `🚀 Selected project "${project.name}". You can now chat with the AI coding agent!`
       );
     } catch (error) {
       console.error('Error handling project selection:', error);
@@ -320,10 +320,10 @@ export class CallbackHandler {
         return;
       }
 
-      // Check if Claude is currently running and abort if needed
+      // Check if Agent is currently running and abort if needed
       let abortMessage = '';
-      if (this.claudeSDK.isQueryRunning(chatId)) {
-        const abortSuccess = await this.claudeSDK.abortQuery(chatId);
+      if (this.agentManager.isQueryRunning(chatId)) {
+        const abortSuccess = await this.agentManager.abortQuery(chatId);
         if (abortSuccess) {
           abortMessage = '🛑 Current query has been stopped.\n';
         }

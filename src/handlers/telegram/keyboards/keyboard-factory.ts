@@ -1,7 +1,7 @@
 import { Markup } from 'telegraf';
 import { MESSAGES } from '../../../constants/messages';
 import { Project } from '../../../models/project';
-import { ClaudeSession, ClaudeProject } from '../../../utils/claude-session-reader';
+import { AgentSession, AgentProject } from '../../../utils/agent-session-reader';
 import { AgentModel, AgentProvider, getModelsForProvider } from '../../../models/types';
 
 export class KeyboardFactory {
@@ -135,7 +135,7 @@ export class KeyboardFactory {
     return Markup.inlineKeyboard(keyboard);
   }
 
-  static createClaudeProjectListKeyboard(projects: ClaudeProject[], showCreateButtons: boolean = true): any {
+  static createProjectCatalogKeyboard(projects: AgentProject[], showCreateButtons: boolean = true): any {
     const keyboard = [];
 
     // Add project buttons (1 per row)
@@ -151,7 +151,7 @@ export class KeyboardFactory {
         : project.name;
 
       // Truncate ID to fit Telegram's 64 byte limit
-      // "claude_project_" = 15 bytes, so max ID length is 49 bytes
+      // "project_catalog_" = 15 bytes, so max ID length is 49 bytes
       const shortId = project.id.length > 45
         ? project.id.substring(project.id.length - 45)
         : project.id;
@@ -159,7 +159,7 @@ export class KeyboardFactory {
       keyboard.push([
         Markup.button.callback(
           `📂 ${displayName} (${dateStr})`,
-          `claude_project_${shortId}`
+          `project_catalog_${shortId}`
         )
       ]);
     }
@@ -180,7 +180,7 @@ export class KeyboardFactory {
     return Markup.inlineKeyboard(keyboard);
   }
 
-  static createSessionListKeyboard(sessions: ClaudeSession[]): any {
+  static createSessionListKeyboard(sessions: AgentSession[]): any {
     const keyboard = [];
 
     // Add session buttons (1 per row due to long text)

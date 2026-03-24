@@ -22,7 +22,7 @@ export interface WebhookConfig {
   secretToken?: string | undefined;
 }
 
-export interface ClaudeCodeConfig {
+export interface AgentCliConfig {
   binaryPath: string;
 }
 
@@ -68,7 +68,7 @@ export interface SecurityConfig {
 export interface Config {
   telegram: TelegramConfig;
   agent: AgentConfig;
-  claudeCode: ClaudeCodeConfig;
+  agentCli: AgentCliConfig;
   codex: CodexConfig;
   workDir: WorkDirConfig;
   storage: StorageConfig;
@@ -114,6 +114,8 @@ export function loadConfig(): Config {
   const storageType = getEnvOrDefault('STORAGE_TYPE', 'redis') as 'redis' | 'memory';
   const agentProvider = getEnvOrDefault('AGENT_PROVIDER', DEFAULT_PROVIDER) as AgentProvider;
   
+  const agentCliPath = process.env.AGENT_CLI_PATH || 'claude';
+
   const config: Config = {
     telegram: {
       botToken: getEnvOrDefault('TG_BOT_TOKEN', ''),
@@ -122,8 +124,8 @@ export function loadConfig(): Config {
     agent: {
       provider: agentProvider,
     },
-    claudeCode: {
-      binaryPath: getEnvOrDefault('CLAUDE_CODE_PATH', 'claude'),
+    agentCli: {
+      binaryPath: agentCliPath,
     },
     codex: {
       ...(process.env.CODEX_PATH ? { binaryPath: process.env.CODEX_PATH } : {}),
@@ -178,8 +180,8 @@ export function validateConfig(config: Config): void {
     throw new Error('AGENT_PROVIDER must be either "claude" or "codex"');
   }
 
-  if (config.agent.provider === 'claude' && !config.claudeCode.binaryPath) {
-    throw new Error('CLAUDE_CODE_PATH is required');
+  if (config.agent.provider === 'claude' && !config.agentCli.binaryPath) {
+    throw new Error('AGENT_CLI_PATH is required');
   }
   
   if (!config.workDir.workDir) {

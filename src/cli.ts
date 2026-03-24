@@ -18,7 +18,7 @@ const PID_FILE = join(CONFIG_DIR, 'gateway.pid');
 
 interface CliConfig {
   token: string;
-  claudeCodePath: string;
+  agentCliPath: string;
   workDir: string;
   storageType: 'memory' | 'redis';
   redisUrl: string;
@@ -34,7 +34,7 @@ interface CliConfig {
 
 const DEFAULTS: CliConfig = {
   token: '',
-  claudeCodePath: 'claude',
+  agentCliPath: 'claude',
   workDir: join(homedir(), 'clinkcode-projects'),
   storageType: 'memory',
   redisUrl: '',
@@ -67,7 +67,7 @@ function saveCliConfig(config: CliConfig): void {
 function generateEnvFile(config: CliConfig): void {
   const lines = [
     `TG_BOT_TOKEN=${config.token}`,
-    `CLAUDE_CODE_PATH=${config.claudeCodePath}`,
+    `AGENT_CLI_PATH=${config.agentCliPath}`,
     `WORK_DIR=${config.workDir}`,
     `STORAGE_TYPE=${config.storageType}`,
     `BOT_MODE=polling`,
@@ -106,7 +106,7 @@ function showBanner(): void {
   console.log('');
   console.log(ccGradient(banner));
   console.log(dim('  ─────────────────────────────────────────────────────────────'));
-  console.log(`  ${accent('●')} ${chalk.bold.white('CLINK CODE')}  ${dim('— Claude Code via Telegram')}`);
+  console.log(`  ${accent('●')} ${chalk.bold.white('CLINK CODE')}  ${dim('— AI coding agent via Telegram')}`);
   console.log(dim('  ─────────────────────────────────────────────────────────────'));
 }
 
@@ -125,7 +125,7 @@ function statusBar(config: CliConfig): void {
     '',
     `  ${dim('Gateway'.padEnd(16))} ${gwStatus}`,
     `  ${dim('Token'.padEnd(16))} ${maskToken(config.token)}`,
-    `  ${dim('Claude CLI'.padEnd(16))} ${accent(config.claudeCodePath)}`,
+    `  ${dim('Agent CLI'.padEnd(16))} ${accent(config.agentCliPath)}`,
     `  ${dim('Work dir'.padEnd(16))} ${chalk.blue(config.workDir)}`,
     `  ${dim('Storage'.padEnd(16))} ${chalk.white(config.storageType)}`,
     `  ${dim('Allowed users'.padEnd(16))} ${config.allowedUsers.length > 0 ? chalk.white(config.allowedUsers.join(', ')) : dim('all')}`,
@@ -167,9 +167,9 @@ function getGatewayStatus(): { running: boolean; pid: number | null } {
   return { running: false, pid: null };
 }
 
-// ── Claude CLI Detection ──
+// ── Agent CLI Detection ──
 
-function detectClaudePaths(): { path: string; source: string }[] {
+function detectAgentCliPaths(): { path: string; source: string }[] {
   const found: { path: string; source: string }[] = [];
   const seen = new Set<string>();
 
@@ -228,10 +228,10 @@ async function runWizard(config: CliConfig): Promise<'start' | 'menu'> {
     process.exit(0);
   }
 
-  // Step 1: Claude CLI
+  // Step 1: Agent CLI
   console.log('');
-  p.log.step(accent('Step 1/5') + dim(' — Claude CLI'));
-  const detected = detectClaudePaths();
+  p.log.step(accent('Step 1/5') + dim(' — Agent CLI'));
+  const detected = detectAgentCliPaths();
 
   if (detected.length > 0) {
     p.log.success(chalk.green('✓') + ` Found ${detected.length} installation(s)`);
@@ -244,7 +244,7 @@ async function runWizard(config: CliConfig): Promise<'start' | 'menu'> {
     cliOptions.push({ value: '__manual__', label: '✏️  Enter path manually' });
 
     const choice = await p.select({
-      message: 'Select Claude CLI to use',
+      message: 'Select Agent CLI to use',
       options: cliOptions,
       initialValue: detected[0]!.path,
     });
@@ -253,26 +253,26 @@ async function runWizard(config: CliConfig): Promise<'start' | 'menu'> {
 
     if (choice === '__manual__') {
       const manualPath = await p.text({
-        message: 'Full path to Claude CLI binary',
+        message: 'Full path to Agent CLI binary',
         placeholder: '/usr/local/bin/claude',
       });
       if (p.isCancel(manualPath)) { p.outro(dim('Setup cancelled.')); process.exit(0); }
-      config.claudeCodePath = (manualPath as string).trim();
+      config.agentCliPath = (manualPath as string).trim();
     } else {
-      config.claudeCodePath = choice as string;
+      config.agentCliPath = choice as string;
     }
   } else {
-    p.log.warn('Claude CLI not found automatically.');
+    p.log.warn('Agent CLI not found automatically.');
     const manualPath = await p.text({
-      message: 'Enter the full path to Claude CLI binary',
+      message: 'Enter the full path to Agent CLI binary',
       placeholder: '/usr/local/bin/claude',
-      initialValue: config.claudeCodePath || 'claude',
+      initialValue: config.agentCliPath || 'claude',
     });
     if (p.isCancel(manualPath)) { p.outro(dim('Setup cancelled.')); process.exit(0); }
-    config.claudeCodePath = (manualPath as string).trim();
+    config.agentCliPath = (manualPath as string).trim();
   }
 
-  p.log.success(`Using ${accent(config.claudeCodePath)}`);
+  p.log.success(`Using ${accent(config.agentCliPath)}`);
   saveCliConfig(config);
 
   // Step 2: Telegram Token
@@ -415,13 +415,13 @@ async function handleToken(config: CliConfig): Promise<void> {
   return mainMenu();
 }
 
-async function handleClaudePath(config: CliConfig): Promise<void> {
-  const detected = detectClaudePaths();
+async function handleAgentCliPath(config: CliConfig): Promise<void> {
+  const detected = detectAgentCliPaths();
 
   const options: Array<{ value: string; label: string; hint?: string }> = [];
 
   for (const d of detected) {
-    const isCurrent = d.path === config.claudeCodePath;
+    const isCurrent = d.path === config.agentCliPath;
     options.push({
       value: d.path,
       label: `${isCurrent ? chalk.green('●') : '○'} ${d.path}`,
@@ -433,13 +433,13 @@ async function handleClaudePath(config: CliConfig): Promise<void> {
   options.push({ value: '__back__', label: '← Back' });
 
   if (detected.length > 0) {
-    p.log.info(`Found ${detected.length} Claude CLI installation(s)`);
+    p.log.info(`Found ${detected.length} Agent CLI installation(s)`);
   } else {
-    p.log.warn('No Claude CLI found automatically.');
+    p.log.warn('No Agent CLI found automatically.');
   }
 
   const choice = await p.select({
-    message: 'Select Claude CLI',
+    message: 'Select Agent CLI',
     options,
   });
 
@@ -447,18 +447,18 @@ async function handleClaudePath(config: CliConfig): Promise<void> {
 
   if (choice === '__manual__') {
     const manualPath = await p.text({
-      message: 'Full path to Claude CLI binary',
+      message: 'Full path to Agent CLI binary',
       placeholder: '/usr/local/bin/claude',
-      initialValue: config.claudeCodePath,
+      initialValue: config.agentCliPath,
     });
     if (p.isCancel(manualPath)) return mainMenu();
-    config.claudeCodePath = (manualPath as string).trim();
+    config.agentCliPath = (manualPath as string).trim();
   } else {
-    config.claudeCodePath = choice as string;
+    config.agentCliPath = choice as string;
   }
 
   saveCliConfig(config);
-  p.log.success(`Claude CLI set to ${accent(config.claudeCodePath)}`);
+  p.log.success(`Agent CLI set to ${accent(config.agentCliPath)}`);
   return mainMenu();
 }
 
@@ -598,7 +598,7 @@ function startGateway(): void {
   const envVars: Record<string, string> = {
     ...process.env as Record<string, string>,
     TG_BOT_TOKEN: config.token,
-    CLAUDE_CODE_PATH: config.claudeCodePath,
+    AGENT_CLI_PATH: config.agentCliPath,
     WORK_DIR: config.workDir,
     STORAGE_TYPE: config.storageType,
     BOT_MODE: 'polling',
@@ -680,7 +680,7 @@ async function mainMenu(): Promise<void> {
 
   options.push(
     { value: 'token', label: 'Telegram token' },
-    { value: 'claude', label: 'Claude CLI path' },
+    { value: 'agentcli', label: 'Agent CLI path' },
     { value: 'workdir', label: 'Working directory' },
     { value: 'users', label: 'Allowed users' },
     { value: 'workers', label: 'Workers (diff viewer)' },
@@ -723,8 +723,8 @@ async function mainMenu(): Promise<void> {
       return mainMenu();
     case 'token':
       return handleToken(config);
-    case 'claude':
-      return handleClaudePath(config);
+    case 'agentcli':
+      return handleAgentCliPath(config);
     case 'workdir':
       return handleWorkDir(config);
     case 'users':
@@ -771,7 +771,7 @@ async function main(): Promise<void> {
 
   if (cmd === 'help' || cmd === '-h' || cmd === '--help') {
     console.log(`
-${chalk.bold('Clink Code')} — Claude Code via Telegram
+${chalk.bold('Clink Code')} — AI coding agent via Telegram
 
 ${chalk.bold('Usage:')}
   clinkcode                  Interactive menu

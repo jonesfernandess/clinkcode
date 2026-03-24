@@ -12,7 +12,7 @@ export interface UserSession {
   // Project management
   activeProject: string;
   
-  // Claude session management
+  // Agent session management
   sessionId?: string;
   projectPath: string;
   active: boolean;
@@ -83,7 +83,7 @@ export class UserSessionModel {
     this.updateActivity();
   }
 
-  // Claude session methods
+  // Agent session methods
   startSession(sessionId: string, projectPath?: string): void {
     this.sessionId = sessionId;
     this.active = true;
