@@ -121,9 +121,13 @@ const CLAUDE_MODELS: ModelInfo[] = [
 ];
 
 export const DEFAULT_CODEX_MODELS: ModelInfo[] = [
-  { value: 'gpt-5-codex', provider: 'codex', displayName: 'GPT-5 Codex', description: 'Coding optimized' },
-  { value: 'gpt-5', provider: 'codex', displayName: 'GPT-5', description: 'Most capable' },
-  { value: 'gpt-5-mini', provider: 'codex', displayName: 'GPT-5 Mini', description: 'Faster' },
+  { value: 'gpt-5.4', provider: 'codex', displayName: 'GPT-5.4', description: 'Most capable (default)' },
+  { value: 'gpt-5.4-mini', provider: 'codex', displayName: 'GPT-5.4 Mini', description: 'Faster' },
+  { value: 'gpt-5.3-codex', provider: 'codex', displayName: 'GPT-5.3 Codex', description: 'Coding optimized' },
+  { value: 'gpt-5.2-codex', provider: 'codex', displayName: 'GPT-5.2 Codex', description: 'Coding optimized' },
+  { value: 'gpt-5.2', provider: 'codex', displayName: 'GPT-5.2', description: 'General purpose' },
+  { value: 'gpt-5.1-codex-max', provider: 'codex', displayName: 'GPT-5.1 Codex Max', description: 'Max coding' },
+  { value: 'gpt-5.1-codex-mini', provider: 'codex', displayName: 'GPT-5.1 Codex Mini', description: 'Lightweight coding' },
 ];
 
 let runtimeCodexModels: ModelInfo[] = [...DEFAULT_CODEX_MODELS];
@@ -134,7 +138,7 @@ export const DEFAULT_PROVIDER: AgentProvider = 'claude';
 
 export const DEFAULT_MODELS: Record<AgentProvider, AgentModel> = {
   claude: 'claude-opus-4-5-20251101',
-  codex: 'gpt-5-codex',
+  codex: 'gpt-5.4',
 };
 
 export const DEFAULT_MODEL: AgentModel = DEFAULT_MODELS[DEFAULT_PROVIDER];
