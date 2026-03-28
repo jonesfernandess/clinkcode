@@ -61,7 +61,7 @@ export class TelegramHandler {
     this.toolHandler = new ToolHandler(this.storage, this.formatter, this.config, this.bot, this.agentManager);
     this.fileBrowserHandler = new FileBrowserHandler(this.storage, this.directory, this.formatter, this.config, this.bot);
     this.messageHandler = new MessageHandler(this.storage, this.github, this.formatter, this.agentManager, this.projectHandler, this.bot, this.config, this.fileBrowserHandler);
-    this.callbackHandler = new CallbackHandler(this.formatter, this.projectHandler, this.storage, this.fileBrowserHandler, this.bot, this.permissionManager, this.agentManager, this.config);
+    this.callbackHandler = new CallbackHandler(this.formatter, this.projectHandler, this.storage, this.fileBrowserHandler, this.bot, this.permissionManager, this.agentManager, this.config, this.commandHandler);
 
 
     this.setupHandlers();
@@ -118,7 +118,10 @@ export class TelegramHandler {
     this.bot.command('bypass', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.BypassPermissions));
 
     // Model selection command
+    this.bot.command('agentconfig', (ctx) => this.commandHandler.handleAgent(ctx));
+    this.bot.command('agent_config', (ctx) => this.commandHandler.handleAgent(ctx));
     this.bot.command('model', (ctx) => this.commandHandler.handleModel(ctx));
+    this.bot.command('reasoning', (ctx) => this.commandHandler.handleReasoning(ctx));
 
     // Diff command
     this.bot.command('diff', (ctx) => this.commandHandler.handleDiff(ctx));

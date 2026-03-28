@@ -1,6 +1,6 @@
 import { Context, Markup, Input } from 'telegraf';
 import { UserSessionModel } from '../../../models/user-session';
-import { UserState, PermissionMode, AgentModel, ModelInfo, getAllProviderModels, resolveModelForProvider } from '../../../models/types';
+import { UserState, PermissionMode, AgentModel, ModelInfo, ModelReasoningEffort, getAllProviderModels, resolveModelForProvider } from '../../../models/types';
 import { IStorage } from '../../../storage/interface';
 import { MessageFormatter } from '../../../utils/formatter';
 import { MESSAGES } from '../../../constants/messages';
@@ -16,6 +16,8 @@ import { html as diff2htmlHtml } from 'diff2html';
 import { IAgentManager } from '../../agent-manager';
 
 export class CommandHandler {
+  private static readonly REASONING_LEVELS: ModelReasoningEffort[] = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+
   private authService: AuthService;
   private telegramSender: TelegramSender;
   private sessionReader: AgentSessionReader;
@@ -197,6 +199,16 @@ export class CommandHandler {
     await this.telegramSender.safeSendMessage(ctx.chat.id, MESSAGES.HELP_TEXT);
   }
 
+  async handleAgent(ctx: Context): Promise<void> {
+    if (!ctx.chat) return;
+    const chatId = ctx.chat.id;
+    await this.telegramSender.safeSendMessage(
+      chatId,
+      '🤖 **Agent Controls**\n\nChoose an action:',
+      KeyboardFactory.createAgentCommandKeyboard()
+    );
+  }
+
 
   async handleStatus(ctx: Context): Promise<void> {
     if (!ctx.chat) return;
@@ -242,6 +254,7 @@ export class CommandHandler {
       activeProjectType,
       activeProjectPath,
       user.permissionMode,
+      user.reasoningEffort,
       authStatus,
       user.sessionId ? 'Yes' : 'No'
     );
@@ -447,6 +460,69 @@ export class CommandHandler {
       text,
       KeyboardFactory.createModelSelectionKeyboard(resolvedModel, currentProvider, models)
     );
+  }
+
+  async handleReasoning(ctx: Context): Promise<void> {
+    if (!ctx.chat) return;
+
+    const chatId = ctx.chat.id;
+    const user = await this.getOrCreateUser(chatId);
+
+    const messageText = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
+    const reasoningArg = messageText.replace('/reasoning', '').trim().toLowerCase();
+
+    if (!reasoningArg) {
+      await this.telegramSender.safeSendMessage(
+        chatId,
+        `🧠 Current reasoning level: **${user.reasoningEffort}**\n\nAvailable levels: ${CommandHandler.REASONING_LEVELS.map((level) => `\`${level}\``).join(', ')}\n\nUsage: \`/reasoning <level>\``
+      );
+      return;
+    }
+
+    const matchedReasoning = CommandHandler.REASONING_LEVELS.find((level) => level === reasoningArg);
+    if (!matchedReasoning) {
+      await ctx.reply(
+        this.formatter.formatError(`Unknown reasoning level: "${reasoningArg}". Available: ${CommandHandler.REASONING_LEVELS.join(', ')}`),
+        { parse_mode: 'MarkdownV2' }
+      );
+      return;
+    }
+
+    await this.setReasoningEffort(ctx, matchedReasoning);
+  }
+
+  async setReasoningEffort(ctx: Context, matchedReasoning: ModelReasoningEffort): Promise<void> {
+    if (!ctx.chat) return;
+
+    const chatId = ctx.chat.id;
+    const user = await this.getOrCreateUser(chatId);
+
+    try {
+      let abortMessage = '';
+      if (this.agentManager.isQueryRunning(chatId)) {
+        const abortSuccess = await this.agentManager.abortQuery(chatId);
+        if (abortSuccess) {
+          abortMessage = '🛑 Current query has been stopped.\n';
+        }
+      }
+
+      user.setReasoningEffort(matchedReasoning);
+      await this.storage.saveUserSession(user);
+
+      const details = `✅ Reasoning level set to **${matchedReasoning}**`;
+      const providerNote = this.agentManager.provider === 'codex'
+        ? '\nThis will apply to subsequent Codex turns.'
+        : '\nThis will apply to subsequent Claude turns.';
+
+      const finalMessage = abortMessage
+        ? `${abortMessage}${details}${providerNote}\n🔄 Continue your conversation with the updated reasoning level.`
+        : `${details}${providerNote}`;
+
+      await this.telegramSender.safeSendMessage(chatId, finalMessage);
+    } catch (error) {
+      await ctx.reply(this.formatter.formatError('Failed to change reasoning level. Please try again.'), { parse_mode: 'MarkdownV2' });
+      console.error('Error changing reasoning level:', error);
+    }
   }
 
   async handleModelChange(ctx: Context, model: AgentModel, targetProvider?: 'claude' | 'codex'): Promise<void> {

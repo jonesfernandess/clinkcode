@@ -122,7 +122,7 @@ Project is ready! You can now chat with the AI coding agent directly.`;
   },
 
   // Status messages
-  STATUS_TEXT: (userState: string, sessionStatus: string, projectCount: number, activeProjectName: string, activeProjectType: string, activeProjectPath: string, permissionMode: string, authStatus: string, hasAgentSession: string) =>
+  STATUS_TEXT: (userState: string, sessionStatus: string, projectCount: number, activeProjectName: string, activeProjectType: string, activeProjectPath: string, permissionMode: string, reasoningEffort: string, authStatus: string, hasAgentSession: string) =>
     `📊 Current Status
 
 🔧 **System Status**
@@ -138,7 +138,8 @@ Project type: ${activeProjectType}
 Project path: ${activeProjectPath}
 
 ⚙️ **Settings**
-Permission mode: ${permissionMode}`,
+Permission mode: ${permissionMode}
+Reasoning level: ${reasoningEffort}`,
 
   // Help text
   HELP_TEXT: `📚 *Clink Code — Help*
@@ -161,8 +162,10 @@ Permission mode: ${permissionMode}`,
 /bypass — Skip all permission prompts
 
 📁 *Tools*
+/agentconfig — Open agent controls
 /ls — Browse project files
 /model — Change model
+/reasoning — Set reasoning level
 /status — View current status
 
 🔐 *Security*

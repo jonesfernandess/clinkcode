@@ -9,6 +9,7 @@ import {
 import { IStorage } from "../storage/interface";
 import {
   DEFAULT_CODEX_MODELS,
+  ModelReasoningEffort,
   ModelInfo,
   PermissionMode,
   setCodexModels,
@@ -30,6 +31,7 @@ interface QueuedInput {
 
 export class CodexManager implements IAgentManager {
   readonly provider = "codex" as const;
+  private static readonly REASONING_LEVELS: ModelReasoningEffort[] = ["minimal", "low", "medium", "high", "xhigh"];
   private storage: IStorage;
   private streamManager = new StreamManager<QueuedInput>();
   private onAgentResponse: (
@@ -187,6 +189,7 @@ export class CodexManager implements IAgentManager {
       skipGitRepoCheck: true,
       sandboxMode: this.mapSandboxMode(session.permissionMode),
       approvalPolicy: this.mapApprovalMode(session.permissionMode),
+      modelReasoningEffort: this.resolveReasoningEffort(session.reasoningEffort),
       webSearchEnabled: true,
       networkAccessEnabled: true,
     };
@@ -208,6 +211,20 @@ export class CodexManager implements IAgentManager {
   private mapApprovalMode(_mode: PermissionMode): "never" {
     // Telegram permission flow is handled externally; avoid blocking TTY prompts in Codex CLI.
     return "never";
+  }
+
+  private resolveReasoningEffort(
+    reasoningEffort: unknown,
+  ): ModelReasoningEffort {
+    if (
+      typeof reasoningEffort === "string" &&
+      CodexManager.REASONING_LEVELS.includes(
+        reasoningEffort as ModelReasoningEffort,
+      )
+    ) {
+      return reasoningEffort as ModelReasoningEffort;
+    }
+    return "medium";
   }
 
   private async handleThreadEvent(

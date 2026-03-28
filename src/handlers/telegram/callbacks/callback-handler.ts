@@ -3,7 +3,7 @@ import { IStorage } from '../../../storage/interface';
 import { MessageFormatter } from '../../../utils/formatter';
 import { ProjectHandler } from '../project/project-handler';
 import { FileBrowserHandler } from '../file-browser/file-browser-handler';
-import { UserState, AgentModel, AgentProvider, ModelInfo, getAllProviderModels } from '../../../models/types';
+import { UserState, AgentModel, AgentProvider, ModelInfo, ModelReasoningEffort, PermissionMode, getAllProviderModels } from '../../../models/types';
 import { PermissionManager } from '../../permission-manager';
 import { AgentSessionReader } from '../../../utils/agent-session-reader';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
@@ -11,6 +11,7 @@ import { TelegramSender } from '../../../services/telegram-sender';
 import { MESSAGES } from '../../../constants/messages';
 import { IAgentManager } from '../../agent-manager';
 import { Config } from '../../../config/config';
+import { CommandHandler } from '../commands/command-handler';
 
 export class CallbackHandler {
   private sessionReader: AgentSessionReader;
@@ -24,7 +25,8 @@ export class CallbackHandler {
     private bot: Telegraf,
     private permissionManager: PermissionManager,
     private agentManager: IAgentManager,
-    private config: Config
+    private config: Config,
+    private commandHandler: CommandHandler
   ) {
     this.sessionReader = new AgentSessionReader();
     this.telegramSender = new TelegramSender(bot);
@@ -83,6 +85,106 @@ export class CallbackHandler {
       await this.fileBrowserHandler.handleFileBrowsingCallback(data, chatId, messageId);
     } else if (data?.startsWith('model_select:')) {
       await this.handleModelSelectCallback(data, chatId, messageId);
+    } else if (data?.startsWith('agent_cmd:')) {
+      await this.handleAgentCommandCallback(ctx, data, chatId, messageId);
+    } else if (data?.startsWith('agent_reasoning:')) {
+      await this.handleAgentReasoningCallback(ctx, data, chatId, messageId);
+    } else if (data?.startsWith('agent_permission:')) {
+      await this.handleAgentPermissionCallback(ctx, data, chatId, messageId);
+    }
+  }
+
+  private async handleAgentCommandCallback(ctx: Context, data: string, chatId: number, messageId?: number): Promise<void> {
+    const action = data.replace('agent_cmd:', '');
+    const user = await this.storage.getUserSession(chatId);
+
+    switch (action) {
+      case 'menu':
+        if (messageId) {
+          await this.bot.telegram.editMessageText(chatId, messageId, undefined, '🤖 Agent Controls\n\nChoose an action:', {
+            ...KeyboardFactory.createAgentCommandKeyboard(),
+          });
+        } else {
+          await this.bot.telegram.sendMessage(chatId, '🤖 Agent Controls\n\nChoose an action:', KeyboardFactory.createAgentCommandKeyboard());
+        }
+        break;
+      case 'model':
+        await this.commandHandler.handleModel(ctx);
+        break;
+      case 'reasoning_menu':
+        if (!user) return;
+        if (messageId) {
+          await this.bot.telegram.editMessageText(chatId, messageId, undefined, `🧠 Reasoning level: ${user.reasoningEffort}`, {
+            ...KeyboardFactory.createAgentReasoningKeyboard(user.reasoningEffort),
+          });
+        } else {
+          await this.bot.telegram.sendMessage(chatId, `🧠 Reasoning level: ${user.reasoningEffort}`, KeyboardFactory.createAgentReasoningKeyboard(user.reasoningEffort));
+        }
+        break;
+      case 'permissions_menu':
+        if (!user) return;
+        if (messageId) {
+          await this.bot.telegram.editMessageText(chatId, messageId, undefined, `🔐 Permission mode: ${user.permissionMode}`, {
+            ...KeyboardFactory.createAgentPermissionKeyboard(user.permissionMode),
+          });
+        } else {
+          await this.bot.telegram.sendMessage(chatId, `🔐 Permission mode: ${user.permissionMode}`, KeyboardFactory.createAgentPermissionKeyboard(user.permissionMode));
+        }
+        break;
+      case 'status':
+        await this.commandHandler.handleStatus(ctx);
+        break;
+      case 'resume':
+        await this.commandHandler.handleResume(ctx);
+        break;
+      case 'abort':
+        await this.commandHandler.handleAbort(ctx);
+        break;
+      case 'clear':
+        await this.commandHandler.handleClear(ctx);
+        break;
+      case 'diff':
+        await this.commandHandler.handleDiff(ctx);
+        break;
+    }
+  }
+
+  private async handleAgentReasoningCallback(ctx: Context, data: string, chatId: number, messageId?: number): Promise<void> {
+    const level = data.replace('agent_reasoning:', '') as ModelReasoningEffort;
+    const validLevels: ModelReasoningEffort[] = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+    if (!validLevels.includes(level)) {
+      await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Invalid reasoning level.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    await this.commandHandler.setReasoningEffort(ctx, level);
+    const user = await this.storage.getUserSession(chatId);
+    if (messageId && user) {
+      await this.bot.telegram.editMessageText(chatId, messageId, undefined, `🧠 Reasoning level: ${user.reasoningEffort}`, {
+        ...KeyboardFactory.createAgentReasoningKeyboard(user.reasoningEffort),
+      });
+    }
+  }
+
+  private async handleAgentPermissionCallback(ctx: Context, data: string, chatId: number, messageId?: number): Promise<void> {
+    const mode = data.replace('agent_permission:', '') as PermissionMode;
+    const validModes = new Set<PermissionMode>([
+      PermissionMode.Default,
+      PermissionMode.AcceptEdits,
+      PermissionMode.Plan,
+      PermissionMode.BypassPermissions,
+    ]);
+    if (!validModes.has(mode)) {
+      await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Invalid permission mode.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    await this.commandHandler.handlePermissionModeChange(ctx, mode);
+    const user = await this.storage.getUserSession(chatId);
+    if (messageId && user) {
+      await this.bot.telegram.editMessageText(chatId, messageId, undefined, `🔐 Permission mode: ${user.permissionMode}`, {
+        ...KeyboardFactory.createAgentPermissionKeyboard(user.permissionMode),
+      });
     }
   }
 

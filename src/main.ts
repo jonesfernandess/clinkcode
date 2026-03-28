@@ -147,7 +147,7 @@ async function main(): Promise<void> {
       { command: 'createproject', description: 'Create a new project' },
       { command: 'listproject', description: 'Browse existing projects' },
       { command: 'exitproject', description: 'Exit current project' },
-      { command: 'model', description: 'Change model' },
+      { command: 'agentconfig', description: 'Open agent controls' },
       { command: 'resume', description: 'Resume a previous session' },
       { command: 'clear', description: 'Clear current session' },
       { command: 'abort', description: 'Abort current query' },
