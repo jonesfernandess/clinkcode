@@ -1,5 +1,4 @@
 import { Telegraf } from 'telegraf';
-import { PermissionMode } from '../models/types';
 import { IStorage } from '../storage/interface';
 import { GitHubManager } from './github';
 import { DirectoryManager } from './directory';
@@ -103,28 +102,12 @@ export class TelegramHandler {
     this.bot.command('exitproject', (ctx) => this.commandHandler.handleExitProject(ctx));
 
     this.bot.command('help', (ctx) => this.commandHandler.handleHelp(ctx));
-    this.bot.command('status', (ctx) => this.commandHandler.handleStatus(ctx));
     this.bot.command('ls', (ctx) => this.fileBrowserHandler.handleLsCommand(ctx));
     this.bot.command('auth', (ctx) => this.commandHandler.handleAuth(ctx));
-
-    this.bot.command('abort', (ctx) => this.commandHandler.handleAbort(ctx));
-    this.bot.command('clear', (ctx) => this.commandHandler.handleClear(ctx));
-    this.bot.command('resume', (ctx) => this.commandHandler.handleResume(ctx));
-
-    // Permission mode commands
-    this.bot.command('default', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.Default));
-    this.bot.command('acceptedits', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.AcceptEdits));
-    this.bot.command('plan', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.Plan));
-    this.bot.command('bypass', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.BypassPermissions));
 
     // Model selection command
     this.bot.command('agentconfig', (ctx) => this.commandHandler.handleAgent(ctx));
     this.bot.command('agent_config', (ctx) => this.commandHandler.handleAgent(ctx));
-    this.bot.command('model', (ctx) => this.commandHandler.handleModel(ctx));
-    this.bot.command('reasoning', (ctx) => this.commandHandler.handleReasoning(ctx));
-
-    // Diff command
-    this.bot.command('diff', (ctx) => this.commandHandler.handleDiff(ctx));
 
     // Onboarding reset command
     this.bot.command('resetonboarding', (ctx) => this.commandHandler.handleResetOnboarding(ctx));

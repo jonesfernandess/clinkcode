@@ -150,23 +150,16 @@ Reasoning level: ${reasoningEffort}`,
 /exitproject — Exit current project
 
 💬 *Session*
-/resume — Resume a previous session
-/clear — Clear current session
-/abort — Abort current query
-/diff — View git diff of current project
+Use /agentconfig for session actions:
+resume, clear, abort, diff
 
 🔧 *Permission Modes*
-/default — Standard with permission prompts
-/acceptedits — Auto-accept file edits
-/plan — Analysis only, no modifications
-/bypass — Skip all permission prompts
+Use /agentconfig to change permission mode
 
 📁 *Tools*
 /agentconfig — Open agent controls
 /ls — Browse project files
-/model — Change model
-/reasoning — Set reasoning level
-/status — View current status
+Use /agentconfig for model, reasoning, and status
 
 🔐 *Security*
 /auth — Authenticate with secret token
