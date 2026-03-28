@@ -160,6 +160,7 @@ Use /agentconfig to change permission mode
 /agentconfig — Open agent controls
 /ls — Browse project files
 Use /agentconfig for model, reasoning, and status
+Direct shortcuts: /agentconfig_model, /agentconfig_reasoning
 
 🔐 *Security*
 /auth — Authenticate with secret token
@@ -236,7 +237,7 @@ Select the model you'd like to use:
 *Sonnet 4.5* — Balanced performance and speed
 *Haiku 4.5* — Fastest, best for simple tasks
 
-You can change this anytime with /model.`,
+You can change this anytime with /agentconfig.`,
 
     PROJECT_GUIDE: `📁 *Create Your First Project*
 
@@ -254,7 +255,7 @@ You're ready to use Clink Code.
 *Quick Start:*
 • /createproject — Create a new project
 • /listproject — Browse existing projects
-• /model — Change model
+• /agentconfig — Agent controls
 • /help — View all commands
 
 Start by creating or selecting a project!`,

@@ -422,7 +422,7 @@ export class CommandHandler {
 
     // Check if a model argument was provided
     const messageText = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
-    const modelArg = messageText.replace('/model', '').trim().toLowerCase();
+    const modelArg = messageText.replace(/^\/(?:model|agentconfig_model)(?:@\w+)?/i, '').trim().toLowerCase();
 
     if (modelArg) {
       // Try to find matching model
@@ -438,7 +438,7 @@ export class CommandHandler {
         await this.handleModelChange(ctx, matchedModel.value, matchedModel.provider);
         return;
       } else {
-        await ctx.reply(this.formatter.formatError(`Unknown model: "${modelArg}". Use /model to see available options.`), { parse_mode: 'MarkdownV2' });
+        await ctx.reply(this.formatter.formatError(`Unknown model: "${modelArg}". Use /agentconfig or /agentconfig_model to see available options.`), { parse_mode: 'MarkdownV2' });
         return;
       }
     }
@@ -469,12 +469,12 @@ export class CommandHandler {
     const user = await this.getOrCreateUser(chatId);
 
     const messageText = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
-    const reasoningArg = messageText.replace('/reasoning', '').trim().toLowerCase();
+    const reasoningArg = messageText.replace(/^\/(?:reasoning|agentconfig_reasoning)(?:@\w+)?/i, '').trim().toLowerCase();
 
     if (!reasoningArg) {
       await this.telegramSender.safeSendMessage(
         chatId,
-        `🧠 Current reasoning level: **${user.reasoningEffort}**\n\nAvailable levels: ${CommandHandler.REASONING_LEVELS.map((level) => `\`${level}\``).join(', ')}\n\nUsage: \`/reasoning <level>\``
+        `🧠 Current reasoning level: **${user.reasoningEffort}**\n\nAvailable levels: ${CommandHandler.REASONING_LEVELS.map((level) => `\`${level}\``).join(', ')}\n\nUsage: \`/agentconfig_reasoning <level>\``
       );
       return;
     }

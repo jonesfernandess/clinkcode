@@ -1,4 +1,5 @@
 import { Telegraf } from 'telegraf';
+import { PermissionMode } from '../models/types';
 import { IStorage } from '../storage/interface';
 import { GitHubManager } from './github';
 import { DirectoryManager } from './directory';
@@ -107,7 +108,17 @@ export class TelegramHandler {
 
     // Model selection command
     this.bot.command('agentconfig', (ctx) => this.commandHandler.handleAgent(ctx));
-    this.bot.command('agent_config', (ctx) => this.commandHandler.handleAgent(ctx));
+    this.bot.command('agentconfig_model', (ctx) => this.commandHandler.handleModel(ctx));
+    this.bot.command('agentconfig_reasoning', (ctx) => this.commandHandler.handleReasoning(ctx));
+    this.bot.command('agentconfig_status', (ctx) => this.commandHandler.handleStatus(ctx));
+    this.bot.command('agentconfig_resume', (ctx) => this.commandHandler.handleResume(ctx));
+    this.bot.command('agentconfig_clear', (ctx) => this.commandHandler.handleClear(ctx));
+    this.bot.command('agentconfig_abort', (ctx) => this.commandHandler.handleAbort(ctx));
+    this.bot.command('agentconfig_diff', (ctx) => this.commandHandler.handleDiff(ctx));
+    this.bot.command('agentconfig_default', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.Default));
+    this.bot.command('agentconfig_acceptedits', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.AcceptEdits));
+    this.bot.command('agentconfig_plan', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.Plan));
+    this.bot.command('agentconfig_bypass', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.BypassPermissions));
 
     // Onboarding reset command
     this.bot.command('resetonboarding', (ctx) => this.commandHandler.handleResetOnboarding(ctx));
