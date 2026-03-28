@@ -160,7 +160,6 @@ Use /agentconfig to change permission mode
 /agentconfig — Open agent controls
 /ls — Browse project files
 Use /agentconfig for model, reasoning, and status
-Direct shortcuts: /agentconfig_model, /agentconfig_reasoning
 
 🔐 *Security*
 /auth — Authenticate with secret token
