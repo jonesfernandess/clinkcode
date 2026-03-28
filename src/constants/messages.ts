@@ -122,7 +122,7 @@ Project is ready! You can now chat with the AI coding agent directly.`;
   },
 
   // Status messages
-  STATUS_TEXT: (userState: string, sessionStatus: string, projectCount: number, activeProjectName: string, activeProjectType: string, activeProjectPath: string, permissionMode: string, authStatus: string, hasAgentSession: string) =>
+  STATUS_TEXT: (userState: string, sessionStatus: string, projectCount: number, activeProjectName: string, activeProjectType: string, activeProjectPath: string, permissionMode: string, reasoningEffort: string, authStatus: string, hasAgentSession: string) =>
     `📊 Current Status
 
 🔧 **System Status**
@@ -138,7 +138,8 @@ Project type: ${activeProjectType}
 Project path: ${activeProjectPath}
 
 ⚙️ **Settings**
-Permission mode: ${permissionMode}`,
+Permission mode: ${permissionMode}
+Reasoning level: ${reasoningEffort}`,
 
   // Help text
   HELP_TEXT: `📚 *Clink Code — Help*
@@ -149,21 +150,16 @@ Permission mode: ${permissionMode}`,
 /exitproject — Exit current project
 
 💬 *Session*
-/resume — Resume a previous session
-/clear — Clear current session
-/abort — Abort current query
-/diff — View git diff of current project
+Use /agentconfig for session actions:
+resume, clear, abort, diff
 
 🔧 *Permission Modes*
-/default — Standard with permission prompts
-/acceptedits — Auto-accept file edits
-/plan — Analysis only, no modifications
-/bypass — Skip all permission prompts
+Use /agentconfig to change permission mode
 
 📁 *Tools*
+/agentconfig — Open agent controls
 /ls — Browse project files
-/model — Change model
-/status — View current status
+Use /agentconfig for model, reasoning, and status
 
 🔐 *Security*
 /auth — Authenticate with secret token
@@ -240,7 +236,7 @@ Select the model you'd like to use:
 *Sonnet 4.5* — Balanced performance and speed
 *Haiku 4.5* — Fastest, best for simple tasks
 
-You can change this anytime with /model.`,
+You can change this anytime with /agentconfig.`,
 
     PROJECT_GUIDE: `📁 *Create Your First Project*
 
@@ -258,7 +254,7 @@ You're ready to use Clink Code.
 *Quick Start:*
 • /createproject — Create a new project
 • /listproject — Browse existing projects
-• /model — Change model
+• /agentconfig — Agent controls
 • /help — View all commands
 
 Start by creating or selecting a project!`,

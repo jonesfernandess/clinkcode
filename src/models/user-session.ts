@@ -1,4 +1,4 @@
-import { UserState, PermissionMode, FileBrowsingState, AgentModel, DEFAULT_MODEL } from './types';
+import { UserState, PermissionMode, FileBrowsingState, AgentModel, DEFAULT_MODEL, ModelReasoningEffort } from './types';
 import { isOnboardingCompleted, markOnboardingCompleted, resetOnboardingStatus } from '../services/onboarding-store';
 
 export interface UserSession {
@@ -29,6 +29,7 @@ export interface UserSession {
   // Model selection
   currentModel: AgentModel;
   hasSelectedModel: boolean;
+  reasoningEffort: ModelReasoningEffort;
 }
 
 export class UserSessionModel {
@@ -44,6 +45,7 @@ export class UserSessionModel {
   authenticated: boolean;
   currentModel: AgentModel;
   hasSelectedModel: boolean;
+  reasoningEffort: ModelReasoningEffort;
 
   constructor(chatId: number) {
     this.chatId = chatId;
@@ -56,6 +58,7 @@ export class UserSessionModel {
     this.authenticated = false;
     this.currentModel = DEFAULT_MODEL;
     this.hasSelectedModel = false;
+    this.reasoningEffort = 'medium';
   }
 
   setActive(active: boolean): void {
@@ -138,6 +141,15 @@ export class UserSessionModel {
     return this.currentModel;
   }
 
+  setReasoningEffort(reasoningEffort: ModelReasoningEffort): void {
+    this.reasoningEffort = reasoningEffort;
+    this.updateActivity();
+  }
+
+  getReasoningEffort(): ModelReasoningEffort {
+    return this.reasoningEffort;
+  }
+
   // Onboarding methods (delegated to persistent file store)
   setOnboardingCompleted(completed: boolean): void {
     if (completed) {
@@ -180,7 +192,8 @@ export class UserSessionModel {
       fileBrowsingState: this.fileBrowsingState,
       authenticated: this.authenticated,
       currentModel: this.currentModel,
-      hasSelectedModel: this.hasSelectedModel
+      hasSelectedModel: this.hasSelectedModel,
+      reasoningEffort: this.reasoningEffort
     };
   }
 
@@ -206,6 +219,7 @@ export class UserSessionModel {
     userSession.currentModel = data.currentModel || DEFAULT_MODEL;
     // Force explicit model selection after each gateway restart.
     userSession.hasSelectedModel = false;
+    userSession.reasoningEffort = data.reasoningEffort || 'medium';
 
     return userSession;
   }

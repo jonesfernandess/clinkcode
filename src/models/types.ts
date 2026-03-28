@@ -14,6 +14,7 @@ export enum UserState {
 }
 
 export type AgentProvider = 'claude' | 'codex';
+export type ModelReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export enum ProjectType {
   GitHub = 'github',
