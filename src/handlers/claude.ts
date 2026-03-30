@@ -1,6 +1,6 @@
 import { query, type Options, AbortError, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { IStorage } from '../storage/interface';
-import { getModelsForProvider, ModelInfo, resolveModelForProvider, TargetTool } from '../models/types';
+import { getModelsForProvider, ModelInfo, ModelReasoningEffort, resolveModelForProvider, TargetTool } from '../models/types';
 import { PermissionManager } from './permission-manager';
 import { StreamManager } from '../utils/stream-manager';
 import { AgentMessage, AgentUserMessage } from '../models/agent-message';
@@ -8,6 +8,13 @@ import { AgentCallbacks, AgentToolInfo, IAgentManager } from './agent-manager';
 
 export class ClaudeManager implements IAgentManager {
   readonly provider = 'claude' as const;
+  private static readonly REASONING_TO_MAX_THINKING_TOKENS: Record<ModelReasoningEffort, number> = {
+    minimal: 1024,
+    low: 4096,
+    medium: 12000,
+    high: 24000,
+    xhigh: 48000,
+  };
   private storage: IStorage;
   private permissionManager: PermissionManager;
   private streamManager = new StreamManager<AgentUserMessage>();
@@ -199,6 +206,7 @@ export class ClaudeManager implements IAgentManager {
     const options: Options = {
       cwd: session.projectPath,
       model: resolveModelForProvider('claude', session.currentModel),
+      maxThinkingTokens: this.resolveMaxThinkingTokens(session.reasoningEffort),
       ...(session.sessionId ? { resume: session.sessionId } : {}),
       ...(this.binaryPath ? { pathToClaudeCodeExecutable: this.binaryPath } : {}),
       abortController: controller,
@@ -223,6 +231,16 @@ export class ClaudeManager implements IAgentManager {
 
     // Start query
     this.sendMessage(chatId, stream, options);
+  }
+
+  private resolveMaxThinkingTokens(reasoningEffort: unknown): number {
+    if (typeof reasoningEffort === 'string') {
+      const mapped = ClaudeManager.REASONING_TO_MAX_THINKING_TOKENS[reasoningEffort as ModelReasoningEffort];
+      if (mapped) {
+        return mapped;
+      }
+    }
+    return ClaudeManager.REASONING_TO_MAX_THINKING_TOKENS.medium;
   }
 
 }

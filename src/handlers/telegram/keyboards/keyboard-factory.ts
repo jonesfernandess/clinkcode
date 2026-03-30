@@ -2,9 +2,72 @@ import { Markup } from 'telegraf';
 import { MESSAGES } from '../../../constants/messages';
 import { Project } from '../../../models/project';
 import { AgentSession, AgentProject } from '../../../utils/agent-session-reader';
-import { AgentModel, AgentProvider, getAllProviderModels, ModelInfo } from '../../../models/types';
+import { AgentModel, AgentProvider, getAllProviderModels, ModelInfo, ModelReasoningEffort, PermissionMode } from '../../../models/types';
 
 export class KeyboardFactory {
+  static createAgentCommandKeyboard(): any {
+    return Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🤖 Model', 'agent_cmd:model'),
+        Markup.button.callback('🧠 Reasoning', 'agent_cmd:reasoning_menu'),
+      ],
+      [
+        Markup.button.callback('📊 Status', 'agent_cmd:status'),
+        Markup.button.callback('🔍 Diff', 'agent_cmd:diff'),
+      ],
+      [
+        Markup.button.callback('🔐 Permissions', 'agent_cmd:permissions_menu'),
+        Markup.button.callback('🔄 Resume', 'agent_cmd:resume'),
+      ],
+      [
+        Markup.button.callback('🛑 Abort', 'agent_cmd:abort'),
+        Markup.button.callback('🧹 Clear', 'agent_cmd:clear'),
+      ],
+      [
+        Markup.button.callback('❌ Close', 'cancel'),
+      ],
+    ]);
+  }
+
+  static createAgentReasoningKeyboard(current: ModelReasoningEffort): any {
+    const levels: ModelReasoningEffort[] = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+    const rows = [];
+    for (let i = 0; i < levels.length; i += 2) {
+      const row = [];
+      const first = levels[i];
+      const second = levels[i + 1];
+      if (first) {
+        row.push(Markup.button.callback(`${first}${current === first ? ' ✓' : ''}`, `agent_reasoning:${first}`));
+      }
+      if (second) {
+        row.push(Markup.button.callback(`${second}${current === second ? ' ✓' : ''}`, `agent_reasoning:${second}`));
+      }
+      rows.push(row);
+    }
+    rows.push([Markup.button.callback('⬅️ Back', 'agent_cmd:menu')]);
+    return Markup.inlineKeyboard(rows);
+  }
+
+  static createAgentPermissionKeyboard(current: PermissionMode): any {
+    const options: PermissionMode[] = [
+      PermissionMode.Default,
+      PermissionMode.AcceptEdits,
+      PermissionMode.Plan,
+      PermissionMode.BypassPermissions,
+    ];
+    const labels: Record<PermissionMode, string> = {
+      [PermissionMode.Default]: 'default',
+      [PermissionMode.AcceptEdits]: 'acceptedits',
+      [PermissionMode.Plan]: 'plan',
+      [PermissionMode.BypassPermissions]: 'bypass',
+    };
+    const rows = options.map((mode) => [
+      Markup.button.callback(`${labels[mode]}${current === mode ? ' ✓' : ''}`, `agent_permission:${mode}`),
+    ]);
+    rows.push([Markup.button.callback('⬅️ Back', 'agent_cmd:menu')]);
+    return Markup.inlineKeyboard(rows);
+  }
+
   static createProjectTypeKeyboard(): any {
     return Markup.inlineKeyboard([
       [
