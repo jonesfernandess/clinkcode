@@ -12,6 +12,7 @@ import { MESSAGES } from '../../../constants/messages';
 import { IAgentManager } from '../../agent-manager';
 import { Config } from '../../../config/config';
 import { CommandHandler } from '../commands/command-handler';
+import { saveAgentConfig } from '../../../services/agent-config-store';
 
 export class CallbackHandler {
   private sessionReader: AgentSessionReader;
@@ -410,58 +411,19 @@ export class CallbackHandler {
         return;
       }
 
-      const user = await this.storage.getUserSession(chatId);
-      if (!user) {
-        await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('No user session found.'), { parse_mode: 'MarkdownV2' });
-        return;
-      }
-
-      const currentProvider = this.agentManager.provider;
-      if (currentProvider === modelInfo.provider && user.currentModel === modelInfo.value) {
-        if (messageId) {
-          try { await this.bot.telegram.deleteMessage(chatId, messageId); } catch {}
-        }
-        await this.bot.telegram.sendMessage(chatId, `ℹ️ Already using **${modelInfo.provider} - ${modelInfo.displayName}**`, { parse_mode: 'Markdown' });
-        return;
-      }
-
-      // Check if Agent is currently running and abort if needed
-      let abortMessage = '';
-      if (this.agentManager.isQueryRunning(chatId)) {
-        const abortSuccess = await this.agentManager.abortQuery(chatId);
-        if (abortSuccess) {
-          abortMessage = '🛑 Current query has been stopped.\n';
-        }
-      }
-
-      const providerChanged = currentProvider !== modelInfo.provider;
-      if (providerChanged) {
-        if (!this.agentManager.setProvider) {
-          await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Provider switching is not supported in this runtime.'), { parse_mode: 'MarkdownV2' });
-          return;
-        }
-        await this.agentManager.setProvider(modelInfo.provider);
-        this.config.agent.provider = modelInfo.provider;
-        // Provider sessions are not cross-compatible.
-        delete user.sessionId;
-      }
-
-      user.setModel(modelInfo.value);
-      await this.storage.saveUserSession(user);
-
       // Delete the selection message
       if (messageId) {
         try { await this.bot.telegram.deleteMessage(chatId, messageId); } catch {}
       }
 
-      const details = providerChanged
-        ? `✅ Model switched to **${modelInfo.provider} - ${modelInfo.displayName}**\n🧹 Session reset because provider changed.`
-        : `✅ Model switched to **${modelInfo.provider} - ${modelInfo.displayName}**`;
-      const finalMessage = abortMessage
-        ? `${abortMessage}${details}\n🔄 Continue your conversation with the new model.`
-        : details;
-
-      await this.telegramSender.safeSendMessage(chatId, finalMessage);
+      saveAgentConfig(
+        { provider: modelInfo.provider, model: modelInfo.value },
+        { origin: 'chat', chatId }
+      );
+      await this.telegramSender.safeSendMessage(
+        chatId,
+        `⏳ Updating agent config to **${modelInfo.provider} - ${modelInfo.displayName}**...`
+      );
     } catch (error) {
       console.error('Error handling model select callback:', error);
       await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Failed to change model. Please try again.'), { parse_mode: 'MarkdownV2' });
@@ -533,14 +495,6 @@ export class CallbackHandler {
           break;
 
         case 'onboarding_model_done':
-          if (!user.hasSelectedModel) {
-            await ctx.reply(this.formatter.formatError('Please select a model before continuing.'), { parse_mode: 'MarkdownV2' });
-            await ctx.reply(
-              MESSAGES.ONBOARDING.MODEL_SELECTION,
-              { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingModelKeyboard(user.currentModel, user.hasSelectedModel) }
-            );
-            break;
-          }
           user.setState(UserState.OnboardingProject);
           await this.storage.saveUserSession(user);
           await ctx.reply(MESSAGES.ONBOARDING.PROJECT_GUIDE, { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingProjectKeyboard() });
@@ -575,17 +529,14 @@ export class CallbackHandler {
               await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Invalid model selected.'), { parse_mode: 'MarkdownV2' });
               return;
             }
-            if (this.agentManager.provider !== selectedModel.provider && this.agentManager.setProvider) {
-              await this.agentManager.setProvider(selectedModel.provider);
-              this.config.agent.provider = selectedModel.provider;
-              delete user.sessionId;
-            }
-            user.setModel(modelValue);
-            await this.storage.saveUserSession(user);
+            saveAgentConfig(
+              { provider: selectedModel.provider, model: modelValue },
+              { origin: 'chat', chatId }
+            );
             // Update keyboard with selection
             await ctx.reply(
               MESSAGES.ONBOARDING.MODEL_SELECTION,
-              { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingModelKeyboard(modelValue, user.hasSelectedModel) }
+              { parse_mode: 'Markdown', ...KeyboardFactory.createOnboardingModelKeyboard(modelValue, true) }
             );
           }
       }

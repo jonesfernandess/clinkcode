@@ -57,7 +57,7 @@ export class UserSessionModel {
     this.permissionMode = PermissionMode.Default;
     this.authenticated = false;
     this.currentModel = DEFAULT_MODEL;
-    this.hasSelectedModel = false;
+    this.hasSelectedModel = true;
     this.reasoningEffort = 'medium';
   }
 
@@ -217,8 +217,7 @@ export class UserSessionModel {
       userSession.active = true;
     }
     userSession.currentModel = data.currentModel || DEFAULT_MODEL;
-    // Force explicit model selection after each gateway restart.
-    userSession.hasSelectedModel = false;
+    userSession.hasSelectedModel = data.hasSelectedModel ?? true;
     userSession.reasoningEffort = data.reasoningEffort || 'medium';
 
     return userSession;

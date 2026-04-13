@@ -9,6 +9,7 @@ import { AuthService } from '../../../services/auth-service';
 import { Config } from '../../../config/config';
 import { TelegramSender } from '../../../services/telegram-sender';
 import { AgentSessionReader } from '../../../utils/agent-session-reader';
+import { saveAgentConfig } from '../../../services/agent-config-store';
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -59,15 +60,14 @@ export class CommandHandler {
       return;
     }
 
-    // Require model selection on every /start invocation.
-    user.hasSelectedModel = false;
-    delete user.sessionId;
-    await this.storage.saveUserSession(user);
-
     const models = await this.getSelectableModels();
+    const currentProvider = this.config.agent.provider;
+    const currentModelValue = resolveModelForProvider(currentProvider, this.config.agent.defaultModel);
+    const currentModel = models.find((m) => m.provider === currentProvider && m.value === currentModelValue);
+    const currentModelName = currentModel?.displayName || currentModelValue;
     await ctx.reply(
-      `🤖 ${MESSAGES.ONBOARDING.WELCOME_RETURNING}\n\nPlease choose which model to use for this session:`,
-      { parse_mode: 'Markdown', ...KeyboardFactory.createModelSelectionKeyboard(user.currentModel, this.agentManager.provider, models) }
+      `🤖 ${MESSAGES.ONBOARDING.WELCOME_RETURNING}\n\nCurrent default: **${currentProvider} - ${currentModelName}**\nUse /agentconfig to change provider or model.`,
+      { parse_mode: 'Markdown' }
     );
   }
 
@@ -445,14 +445,11 @@ export class CommandHandler {
 
     // Show current model and selection keyboard
     const models = await this.getSelectableModels();
-    const currentProvider = this.agentManager.provider;
-    const resolvedModel = resolveModelForProvider(currentProvider, user.currentModel);
-    if (resolvedModel !== user.currentModel) {
-      user.setModel(resolvedModel);
-      await this.storage.saveUserSession(user);
-    }
+    const currentProvider = this.config.agent.provider;
+    const selectedModel = user.hasSelectedModel ? user.currentModel : this.config.agent.defaultModel;
+    const resolvedModel = resolveModelForProvider(currentProvider, selectedModel);
     const currentModel = models.find((m) => m.provider === currentProvider && m.value === resolvedModel);
-    const currentModelName = currentModel?.displayName || user.currentModel;
+    const currentModelName = currentModel?.displayName || resolvedModel;
 
     const text = `🤖 Current model: **${currentProvider} - ${currentModelName}**\n\nSelect a model:`;
     await this.telegramSender.safeSendMessage(
@@ -529,7 +526,6 @@ export class CommandHandler {
     if (!ctx.chat) return;
 
     const chatId = ctx.chat.id;
-    const user = await this.getOrCreateUser(chatId);
     const availableModels = await this.getSelectableModels();
     const modelInfo = targetProvider
       ? availableModels.find((m) => m.provider === targetProvider && m.value === model)
@@ -541,41 +537,15 @@ export class CommandHandler {
     }
 
     try {
-      // Check if Agent is currently running and abort if needed
-      let abortMessage = '';
-      if (this.agentManager.isQueryRunning(chatId)) {
-        const abortSuccess = await this.agentManager.abortQuery(chatId);
-        if (abortSuccess) {
-          abortMessage = '🛑 Current query has been stopped.\n';
-        }
-      }
-
-      const currentProvider = this.agentManager.provider;
-      const providerChanged = currentProvider !== modelInfo.provider;
-      if (providerChanged) {
-        if (!this.agentManager.setProvider) {
-          await ctx.reply(this.formatter.formatError('Provider switching is not supported in this runtime.'), { parse_mode: 'MarkdownV2' });
-          return;
-        }
-        await this.agentManager.setProvider(modelInfo.provider);
-        this.config.agent.provider = modelInfo.provider;
-        // Provider sessions are not cross-compatible.
-        delete user.sessionId;
-      }
-
-      user.setModel(modelInfo.value);
-      await this.storage.saveUserSession(user);
-
       const selectedModelName = modelInfo.displayName || modelInfo.value;
-      const details = providerChanged
-        ? `✅ Model switched to **${modelInfo.provider} - ${selectedModelName}**\n🧹 Session reset because provider changed.`
-        : `✅ Model switched to **${modelInfo.provider} - ${selectedModelName}**`;
-
-      const finalMessage = abortMessage
-        ? `${abortMessage}${details}\n🔄 Continue your conversation with the new model.`
-        : details;
-
-      await this.telegramSender.safeSendMessage(chatId, finalMessage);
+      saveAgentConfig(
+        { provider: modelInfo.provider, model: modelInfo.value },
+        { origin: 'chat', chatId }
+      );
+      await this.telegramSender.safeSendMessage(
+        chatId,
+        `⏳ Updating agent config to **${modelInfo.provider} - ${selectedModelName}**...`
+      );
     } catch (error) {
       await ctx.reply(this.formatter.formatError('Failed to change model. Please try again.'), { parse_mode: 'MarkdownV2' });
       console.error('Error changing model:', error);

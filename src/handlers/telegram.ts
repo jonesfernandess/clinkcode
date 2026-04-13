@@ -8,6 +8,9 @@ import { Config } from '../config/config';
 import { PermissionManager } from './permission-manager';
 import { AgentMessage } from '../models/agent-message';
 import { AgentToolInfo, IAgentManager } from './agent-manager';
+import { ApplyAgentConfigResult, applyAgentConfig } from '../services/agent-config-apply';
+import { AgentConfigEvents } from '../services/agent-config-events';
+import { AgentConfigSavedEvent, AgentConfigSnapshot, onAgentConfigSaved } from '../services/agent-config-store';
 
 // Import handlers
 import { CommandHandler } from './telegram/commands/command-handler';
@@ -34,6 +37,11 @@ export class TelegramHandler {
   private toolHandler: ToolHandler;
   private fileBrowserHandler: FileBrowserHandler;
   private projectHandler: ProjectHandler;
+  private agentConfigEvents: AgentConfigEvents;
+  private latestAgentConfig: AgentConfigSnapshot | null = null;
+  private lastAnnouncedRevisionByChat: Map<number, string> = new Map();
+  private pendingAckByRevision: Map<string, Set<number>> = new Map();
+  private disposeAgentConfigSavedListener: (() => void) | null = null;
 
   constructor(
     bot: Telegraf,
@@ -53,6 +61,23 @@ export class TelegramHandler {
     this.formatter = formatter;
     this.config = config;
     this.permissionManager = permissionManager;
+    this.agentConfigEvents = new AgentConfigEvents();
+    this.disposeAgentConfigSavedListener = onAgentConfigSaved((event: AgentConfigSavedEvent) => {
+      this.handleAgentConfigSaved(event);
+    });
+    this.agentConfigEvents.on('changed', (snapshot: AgentConfigSnapshot) => {
+      this.latestAgentConfig = snapshot;
+      void this.applySnapshot(snapshot)
+        .then(() => this.applyPendingAcks(snapshot))
+        .catch((error) => console.error('[AgentConfig] Error applying changed snapshot:', error));
+    });
+    this.agentConfigEvents.start();
+    this.latestAgentConfig = this.agentConfigEvents.getLatest();
+    if (this.latestAgentConfig) {
+      void this.applySnapshot(this.latestAgentConfig)
+        .then(() => this.applyPendingAcks(this.latestAgentConfig!))
+        .catch((error) => console.error('[AgentConfig] Error applying initial snapshot:', error));
+    }
 
     // Initialize handlers
     this.commandHandler = new CommandHandler(this.storage, this.formatter, this.agentManager, this.config, this.bot);
@@ -95,6 +120,11 @@ export class TelegramHandler {
 
 
   private setupHandlers(): void {
+    this.bot.use(async (ctx, next) => {
+      await this.syncAgentConfigForChat(ctx.chat?.id);
+      await next();
+    });
+
     // Command handlers
     this.bot.start((ctx) => this.commandHandler.handleStart(ctx));
     this.bot.command('createproject', (ctx) => this.commandHandler.handleCreateProject(ctx));
@@ -143,9 +173,124 @@ export class TelegramHandler {
 
   public async cleanup(): Promise<void> {
     try {
+      this.agentConfigEvents.stop();
+      this.disposeAgentConfigSavedListener?.();
+      this.disposeAgentConfigSavedListener = null;
       console.log('TelegramHandler cleanup completed');
     } catch (error) {
       console.error('Error during cleanup:', error);
     }
+  }
+
+  private async applySnapshot(snapshot: AgentConfigSnapshot, chatId?: number): Promise<void> {
+    const result = await this.applySnapshotToChat(snapshot, chatId);
+    if (!result) return;
+
+    if (!result.success) {
+      console.error(`[AgentConfig] Failed to apply snapshot: ${result.reason || 'unknown reason'}`);
+      return;
+    }
+
+    if (!chatId) return;
+
+    if (result.appliedToChat && !result.unchanged) {
+      await this.sendAppliedMessage(chatId, snapshot, result, 'auto');
+    }
+  }
+
+  private async applySnapshotToChat(
+    snapshot: AgentConfigSnapshot,
+    chatId?: number,
+    abortRunningQuery = false
+  ): Promise<ApplyAgentConfigResult | null> {
+    const result = await applyAgentConfig({
+      snapshot,
+      config: this.config,
+      agentManager: this.agentManager,
+      storage: this.storage,
+      ...(typeof chatId === 'number' ? { chatId } : {}),
+      abortRunningQuery,
+    });
+
+    return result;
+  }
+
+  private async syncAgentConfigForChat(chatId?: number): Promise<void> {
+    if (!chatId || !this.latestAgentConfig) return;
+
+    const revision = this.latestAgentConfig.revision;
+    const result = await this.applySnapshotToChat(this.latestAgentConfig, chatId, false);
+    if (!result) return;
+
+    if (!result.success) {
+      console.error(`[AgentConfig] Failed to sync chat ${chatId}: ${result.reason || 'unknown reason'}`);
+      return;
+    }
+
+    if (!result.appliedToChat || result.unchanged) {
+      return;
+    }
+
+    if (this.lastAnnouncedRevisionByChat.get(chatId) === revision) return;
+    await this.sendAppliedMessage(chatId, this.latestAgentConfig, result, 'auto');
+  }
+
+  private handleAgentConfigSaved(event: AgentConfigSavedEvent): void {
+    if (event.origin !== 'chat') return;
+    if (typeof event.chatId !== 'number') return;
+    this.latestAgentConfig = event.snapshot;
+    this.registerPendingAck(event.snapshot.revision, event.chatId);
+    void this.applySnapshot(event.snapshot)
+      .then(() => this.applyPendingAcks(event.snapshot))
+      .catch((error) => console.error('[AgentConfig] Error applying chat-saved snapshot:', error));
+  }
+
+  private registerPendingAck(revision: string, chatId: number): void {
+    const existing = this.pendingAckByRevision.get(revision);
+    if (existing) {
+      existing.add(chatId);
+    } else {
+      this.pendingAckByRevision.set(revision, new Set([chatId]));
+    }
+  }
+
+  private async applyPendingAcks(snapshot: AgentConfigSnapshot): Promise<void> {
+    const pendingChats = this.pendingAckByRevision.get(snapshot.revision);
+    if (!pendingChats || pendingChats.size === 0) return;
+
+    this.pendingAckByRevision.delete(snapshot.revision);
+    for (const chatId of pendingChats) {
+      const result = await this.applySnapshotToChat(snapshot, chatId, true);
+      if (!result || !result.success) {
+        console.error(`[AgentConfig] Failed pending apply for chat ${chatId}: ${result?.reason || 'unknown reason'}`);
+        continue;
+      }
+      if (!result.appliedToChat) {
+        continue;
+      }
+      await this.sendAppliedMessage(chatId, snapshot, result, 'saved');
+    }
+  }
+
+  private async sendAppliedMessage(
+    chatId: number,
+    snapshot: AgentConfigSnapshot,
+    result: ApplyAgentConfigResult,
+    mode: 'auto' | 'saved'
+  ): Promise<void> {
+    const revision = snapshot.revision;
+    const alreadyActive = result.unchanged;
+    const sessionNote = result.sessionReset ? '\n🧹 Existing provider session was reset.' : '';
+    const abortNote = result.queryAborted ? '\n🛑 Current query was stopped.' : '';
+    const headline = mode === 'saved'
+      ? (alreadyActive ? '✅ Agent config already active' : '✅ Agent config applied')
+      : '🔄 Agent config applied';
+
+    await this.bot.telegram.sendMessage(
+      chatId,
+      `${headline}: **${snapshot.provider} - ${result.modelDisplayName}**${sessionNote}${abortNote}`,
+      { parse_mode: 'Markdown' }
+    );
+    this.lastAnnouncedRevisionByChat.set(chatId, revision);
   }
 }
