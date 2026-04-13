@@ -14,6 +14,8 @@ import {
 } from "fs";
 import { execSync } from "child_process";
 import { join } from "path";
+import { AgentModel, AgentProvider, getDefaultModelForProvider, getModelsForProvider, resolveModelForProvider } from "./models/types";
+import { ensureAgentConfigFile, saveAgentConfig } from "./services/agent-config-store";
 
 // ── Config ──
 
@@ -25,6 +27,7 @@ const PID_FILE = join(CONFIG_DIR, "gateway.pid");
 interface CliConfig {
   token: string;
   agentProvider: "claude" | "codex";
+  agentModel: AgentModel;
   agentCliPath: string;
   workDir: string;
   storageType: "memory" | "redis";
@@ -42,6 +45,7 @@ interface CliConfig {
 const DEFAULTS: CliConfig = {
   token: "",
   agentProvider: "claude",
+  agentModel: getDefaultModelForProvider("claude"),
   agentCliPath: "claude",
   workDir: join(homedir(), "clinkcode-projects"),
   storageType: "memory",
@@ -57,25 +61,43 @@ const DEFAULTS: CliConfig = {
 };
 
 function loadCliConfig(): CliConfig {
-  if (!existsSync(CONFIG_FILE)) return { ...DEFAULTS };
+  const agentDefaults = ensureAgentConfigFile();
+  if (!existsSync(CONFIG_FILE)) {
+    return {
+      ...DEFAULTS,
+      agentProvider: agentDefaults.provider,
+      agentModel: agentDefaults.model,
+    };
+  }
   try {
     const data = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
-    return { ...DEFAULTS, ...data };
+    const merged = { ...DEFAULTS, ...data } as CliConfig;
+    merged.agentProvider = agentDefaults.provider;
+    merged.agentModel = agentDefaults.model;
+    return merged;
   } catch {
-    return { ...DEFAULTS };
+    return {
+      ...DEFAULTS,
+      agentProvider: agentDefaults.provider,
+      agentModel: agentDefaults.model,
+    };
   }
 }
 
 function saveCliConfig(config: CliConfig): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
+  config.agentModel = resolveModelForProvider(config.agentProvider, config.agentModel);
   writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
   generateEnvFile(config);
+  saveAgentConfig(
+    { provider: config.agentProvider, model: config.agentModel },
+    { origin: "cli" }
+  );
 }
 
 function generateEnvFile(config: CliConfig): void {
   const lines = [
     `TG_BOT_TOKEN=${config.token}`,
-    `AGENT_PROVIDER=${config.agentProvider}`,
     `AGENT_CLI_PATH=${config.agentCliPath}`,
     `WORK_DIR=${config.workDir}`,
     `STORAGE_TYPE=${config.storageType}`,
@@ -144,6 +166,7 @@ function statusBar(config: CliConfig): void {
     `  ${dim("Gateway".padEnd(16))} ${gwStatus}`,
     `  ${dim("Token".padEnd(16))} ${maskToken(config.token)}`,
     `  ${dim("Provider".padEnd(16))} ${chalk.white(config.agentProvider)}`,
+    `  ${dim("Model".padEnd(16))} ${chalk.white(config.agentModel)}`,
     `  ${dim("Agent CLI".padEnd(16))} ${accent(config.agentCliPath)}`,
     `  ${dim("Work dir".padEnd(16))} ${chalk.blue(config.workDir)}`,
     `  ${dim("Storage".padEnd(16))} ${chalk.white(config.storageType)}`,
@@ -226,6 +249,26 @@ function detectAgentCliPaths(): { path: string; source: string }[] {
   return found;
 }
 
+async function selectAgentModel(provider: AgentProvider, currentModel?: AgentModel): Promise<AgentModel | null> {
+  const models = getModelsForProvider(provider);
+  if (models.length === 0) {
+    return resolveModelForProvider(provider, "" as AgentModel);
+  }
+
+  const selected = await p.select({
+    message: `Select default model for ${provider}`,
+    options: models.map((model) => ({
+      value: model.value,
+      label: model.displayName,
+      hint: model.description,
+    })),
+    initialValue: resolveModelForProvider(provider, (currentModel || "") as AgentModel),
+  });
+
+  if (p.isCancel(selected)) return null;
+  return selected as AgentModel;
+}
+
 // ── Wizard ──
 
 async function runWizard(config: CliConfig): Promise<"start" | "menu"> {
@@ -260,7 +303,7 @@ async function runWizard(config: CliConfig): Promise<"start" | "menu"> {
 
   // Step 1: Agent CLI
   console.log("");
-  p.log.step(accent("Step 1/5") + dim(" — Agent CLI"));
+  p.log.step(accent("Step 1/6") + dim(" — Agent CLI"));
   const detected = detectAgentCliPaths();
 
   if (detected.length > 0) {
@@ -319,7 +362,7 @@ async function runWizard(config: CliConfig): Promise<"start" | "menu"> {
 
   // Step 2: Telegram Token
   console.log("");
-  p.log.step(accent("Step 2/5") + dim(" — Telegram Bot Token"));
+  p.log.step(accent("Step 2/6") + dim(" — Telegram Bot Token"));
   p.log.message(dim("1. Open Telegram and search for @BotFather"));
   p.log.message(dim("2. Send /newbot and follow the instructions"));
   p.log.message(dim("3. Copy the token and paste it here"));
@@ -343,9 +386,32 @@ async function runWizard(config: CliConfig): Promise<"start" | "menu"> {
   saveCliConfig(config);
   p.log.success("Token saved!");
 
-  // Step 3: Allowed Users
+  // Step 3: Agent Provider + Model
   console.log("");
-  p.log.step(accent("Step 3/5") + dim(" — Allowed Users"));
+  p.log.step(accent("Step 3/6") + dim(" — Agent Provider + Model"));
+
+  const provider = await p.select({
+    message: "Select agent provider",
+    options: [
+      { value: "claude", label: "Claude" },
+      { value: "codex", label: "Codex" },
+    ],
+    initialValue: config.agentProvider,
+  });
+
+  if (!p.isCancel(provider)) {
+    config.agentProvider = provider as AgentProvider;
+    const model = await selectAgentModel(config.agentProvider, config.agentModel);
+    if (!p.isCancel(model) && model) {
+      config.agentModel = model;
+      saveCliConfig(config);
+      p.log.success(`Using ${accent(config.agentProvider)} with model ${accent(config.agentModel)}`);
+    }
+  }
+
+  // Step 4: Allowed Users
+  console.log("");
+  p.log.step(accent("Step 4/6") + dim(" — Allowed Users"));
   p.log.message(dim("Add your Telegram user ID for security."));
   p.log.message(
     dim("Don't know your ID? Send /start to @userinfobot on Telegram."),
@@ -379,9 +445,9 @@ async function runWizard(config: CliConfig): Promise<"start" | "menu"> {
     }
   }
 
-  // Step 4: Working Directory
+  // Step 5: Working Directory
   console.log("");
-  p.log.step(accent("Step 4/5") + dim(" — Working Directory"));
+  p.log.step(accent("Step 5/6") + dim(" — Working Directory"));
   p.log.message(dim("Where should cloned GitHub projects be stored?"));
 
   const workDir = await p.text({
@@ -399,9 +465,9 @@ async function runWizard(config: CliConfig): Promise<"start" | "menu"> {
     p.log.success("Working directory saved!");
   }
 
-  // Step 5: Storage
+  // Step 6: Storage
   console.log("");
-  p.log.step(accent("Step 5/5") + dim(" — Storage"));
+  p.log.step(accent("Step 6/6") + dim(" — Storage"));
 
   const storage = await p.select({
     message: "Storage type",
@@ -536,9 +602,12 @@ async function handleProvider(config: CliConfig): Promise<void> {
 
   if (p.isCancel(provider) || provider === "__back__") return mainMenu();
 
-  config.agentProvider = provider as "claude" | "codex";
+  config.agentProvider = provider as AgentProvider;
+  const model = await selectAgentModel(config.agentProvider, config.agentModel);
+  if (!model) return mainMenu();
+  config.agentModel = model;
   saveCliConfig(config);
-  p.log.success(`Provider set to ${accent(config.agentProvider)}`);
+  p.log.success(`Provider set to ${accent(config.agentProvider)} with model ${accent(config.agentModel)}`);
   return mainMenu();
 }
 
@@ -687,7 +756,6 @@ function startGateway(): void {
   const envVars: Record<string, string> = {
     ...(process.env as Record<string, string>),
     TG_BOT_TOKEN: config.token,
-    AGENT_PROVIDER: config.agentProvider,
     AGENT_CLI_PATH: config.agentCliPath,
     WORK_DIR: config.workDir,
     STORAGE_TYPE: config.storageType,
@@ -900,7 +968,7 @@ ${chalk.bold("Usage:")}
   clinkcode start            Start the gateway
   clinkcode stop             Stop the gateway
   clinkcode status           Show gateway status
-  clinkcode provider <name>  Set provider (claude|codex)
+  clinkcode provider <name> [model]  Set provider and model
   clinkcode help             Show this help
 `);
     return;
@@ -909,13 +977,30 @@ ${chalk.bold("Usage:")}
   if (cmd === "provider") {
     const value = (args[1] || "").toLowerCase();
     if (value !== "claude" && value !== "codex") {
-      console.error("Usage: clinkcode provider <claude|codex>");
+      console.error("Usage: clinkcode provider <claude|codex> [model]");
       process.exit(1);
     }
     const config = loadCliConfig();
-    config.agentProvider = value as "claude" | "codex";
+    config.agentProvider = value as AgentProvider;
+    const explicitModel = args[2] as AgentModel | undefined;
+    if (explicitModel) {
+      const models = getModelsForProvider(config.agentProvider);
+      const validModel = models.some((model) => model.value === explicitModel);
+      if (!validModel) {
+        console.error(`Invalid model "${explicitModel}" for provider "${config.agentProvider}"`);
+        process.exit(1);
+      }
+      config.agentModel = explicitModel;
+    } else {
+      const selectedModel = await selectAgentModel(config.agentProvider, config.agentModel);
+      if (!selectedModel) {
+        console.log("Provider update cancelled.");
+        return;
+      }
+      config.agentModel = selectedModel;
+    }
     saveCliConfig(config);
-    console.log(`Provider set to ${config.agentProvider}`);
+    console.log(`Provider set to ${config.agentProvider} with model ${config.agentModel}`);
     return;
   }
 

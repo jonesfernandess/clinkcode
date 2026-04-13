@@ -138,8 +138,8 @@ export const AVAILABLE_MODELS: ModelInfo[] = [...CLAUDE_MODELS, ...DEFAULT_CODEX
 export const DEFAULT_PROVIDER: AgentProvider = 'claude';
 
 export const DEFAULT_MODELS: Record<AgentProvider, AgentModel> = {
-  claude: 'claude-opus-4-5-20251101',
-  codex: 'gpt-5.4',
+  claude: CLAUDE_MODELS[0]!.value,
+  codex: DEFAULT_CODEX_MODELS[0]!.value,
 };
 
 export const DEFAULT_MODEL: AgentModel = DEFAULT_MODELS[DEFAULT_PROVIDER];
@@ -164,8 +164,13 @@ export function getAllProviderModels(): ModelInfo[] {
   return [...CLAUDE_MODELS, ...runtimeCodexModels];
 }
 
+export function getDefaultModelForProvider(provider: AgentProvider): AgentModel {
+  const providerModels = getModelsForProvider(provider);
+  return providerModels[0]?.value || DEFAULT_MODELS[provider];
+}
+
 export function resolveModelForProvider(provider: AgentProvider, currentModel: AgentModel): AgentModel {
   const providerModels = getModelsForProvider(provider);
   const hasModel = providerModels.some((model) => model.value === currentModel);
-  return hasModel ? currentModel : DEFAULT_MODELS[provider];
+  return hasModel ? currentModel : getDefaultModelForProvider(provider);
 }
